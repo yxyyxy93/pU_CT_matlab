@@ -133,7 +133,8 @@ classdef class_process_RFdata
                 for j = 1:ly
                     img_hilbert(i, j, :) = hilbert(img_origin(i, j, :));
                 end
-                disp(i);
+                clc;
+                disp([num2str(i) '/' num2str(lx)]);
             end
             obj.img = single(img_origin);
             obj.img_hil = single(img_hilbert);
@@ -873,7 +874,7 @@ classdef class_process_RFdata
             pks_cmp = pks' - Af * A_ratio * exp(-alpha*(locs - front_I_temp));
             if find(pks_cmp>0, 1)
                 rear_I_temp = locs(find(pks_cmp>0, 1));
-            else
+            elseif ~isempty(locs)
                 rear_I_temp = locs(end);
             end
             Gate = Af * A_ratio * exp(-alpha*(t - front_I_temp));

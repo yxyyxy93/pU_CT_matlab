@@ -175,10 +175,12 @@ classdef class_process_woven_RFdata < class_process_RFdata
             end
             %             %remove the direct component
             %             B_scan = B_scan - mean(B_scan, 2);
-            AS_bscan = B_scan';
-            inph_ex  = angle(AS_bscan);
-            inam_ex  = abs(AS_bscan);
-            infq_ex  = diff(unwrap(inph_ex, [], 1), 1, 1) /2 / pi * obj.fs;
+            AS_bscan       = B_scan';
+            inph_ex        = angle(AS_bscan);
+            inam_ex        = abs(AS_bscan);
+            inph_ex_unwarp = unwrap(inph_ex(end:-1:1, :), [], 1);  % reverse the array for correct differiatien
+            infq_ex        = diff(inph_ex_unwarp, 1, 1) /2 / pi * obj.fs;
+            infq_ex        = infq_ex(end:-1:1, :); % reverse bakc
             % ***** plot inam
             cf = figure('Name', ['Bscan' '_', B_type, '_', num2str(index), '_inam']);
             set(cf, 'Position', [0, 0, 600, 600], 'color', 'white');
@@ -205,7 +207,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             set(gca, 'linewidth', 2);
             cl = caxis;
             caxis(cl / 1.5);
-            % ***** plot inph
+            % ***** plot inph ************
             cf = figure('Name', ['Bscan' '_', B_type, '_', num2str(index), '_inph']);
             set(cf, 'Position', [0, 0, 600, 600], 'color', 'white');
             imagesc(x, z(2:end), inph_ex);

@@ -29,7 +29,7 @@ process3.fy = 1 / 0.2e-3; % unit: 1 / m
 process3               = process3.read_origin_data; % read (reset) the dataset
 
 %% ***********
-FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Woven_samples\BP1_3_025m\";   % the destination folder
+FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Woven_samples\BP1_3_025m";   % the destination folder
 save(strcat(FolderName, Filename1(1:end-4), 'mat'), '-v7.3');
 
 load(strcat(FolderName, 'V313\20220207_BP1_3_025m_V313_25db_PEmat.mat'));
@@ -65,11 +65,10 @@ process3.show_hilbert_Ascan(x, y);
 
 %%
 % Bscan origin
-close all;
 
 B_type = 'x';
-index = 348;
-Bwin  = 1:270;
+index = 100;
+Bwin  = 1:300;
 PropertyName = 'img_hil';
 process3.demo_Bscan_inst(B_type, index, Bwin, PropertyName);
 
@@ -87,8 +86,8 @@ filtertype   = {'LP', 'ideal'};
 % filtertype   = {'nofilter', 'ideal'};
 
 % zrange       = [300 600]; % for DT
-zrange       = [900 1200]; % for PE
-% zrange       = [1000 1300]; % for PE
+% zrange       = [900 1200]; % for PE
+zrange       = [1000 1300]; % for PE
 
 drop         = -3; % dB
 drop         = -6; % dB
@@ -127,7 +126,9 @@ snr                    = process3.calculate_SNR(win_signal, win_noise);
 process3               = process3.align_refer_ascan(x, y); 
 
 %% low-pass filter
-bandpassFreq = 30e6;
+bandpassFreq = 10e6;
+x = 163;
+y = 100;
 
 process3 = process3.Filter_lowpass(bandpassFreq, 'img_hil');
 
@@ -159,8 +160,8 @@ A_ratio      = 0.95;
 max_len  = 1400;
 
 % process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
-x = 134;
-y = 348;
+x = 111;
+y = 224;
 
 % process3.show_Ascan_inam_peaks(x, y, MinPD, MinPH, PropertyName); % x, y
 %
@@ -171,15 +172,15 @@ PropertyName = 'img_hil';
 % PropertyName = 'img_WienerDeconv';
 MinPD        = 25;
 MinPH        = 0.003;  % these 2 parameters need to be changed for surface estimation.
-alpha        = 5e-3;
-% A_ratio      = 0.9;
-A_ratio      = 0.95;
+alpha        = 4e-3;
+A_ratio      = 0.9;
+% A_ratio      = 0.95;
 % max_len  = 1499;
 max_len  = 1400;
 
 % process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
-% x = 111;
-% y = 224;
+x = 111;
+y = 224;
 
 % process3.show_Ascan_inam_peaks(x, y, MinPD, MinPH, PropertyName); % x, y
 %
@@ -268,7 +269,7 @@ x         = 54;
 y         = 330;
 % process3.demo_logGabor_plytrack_inph_v2(x, y, f0, sigma, threshold);
 process3.show_hilbert_Ascan(x, y);
-process3.show_logGabor_Scaleogram(3e6:0.1e6:20e6, sigma, x, y);
+% process3.show_logGabor_Scaleogram(3e6:0.1e6:16e6, sigma, x, y);
 
 % 0.676 us - 2.13 us
 %  
