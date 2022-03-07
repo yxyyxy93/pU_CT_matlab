@@ -2,6 +2,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
     % sub class of class_process_RFdata
     properties
         img_3dfft
+        img_fftfilter
     end
     
     methods
@@ -197,7 +198,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
                 hold on;
             end
             % figure setup
-            colormap(gray);
+            colormap(jet);
             h = colorbar;
             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
             set(gca, 'Fontname', 'times new Roman');
@@ -247,7 +248,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
                 hold on;
             end
             % figure setup
-            colormap(gray);
+            colormap(jet);
             h = colorbar;
             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Freq. (MHz)');
             set(gca, 'Fontname', 'times new Roman');
@@ -255,7 +256,131 @@ classdef class_process_woven_RFdata < class_process_RFdata
             ylabel('\fontname {times new roman} TOF (\mus)', 'fontsize', 16);
             set(gca, 'fontsize', 16);
             set(gca, 'linewidth', 2);
-            caxis([0 20]);
+            caxis([-20 30]);
+        end
+        
+        function demo_Bscan_inst_needHilbert(obj, B_type, index, Bwin, PropertyName)
+            % demonstrate the B_scan of the img
+            % show inph_ex
+            % index: the index of the slics in 'B_type' direction, units: mm, mm, us
+            % Bwin: the indexes of the first and the last points in Bscan
+            % PropertyName: the dataset to use
+            % image
+            inph_visual = obj.(PropertyName);
+            x = (1: Bwin(end)-Bwin(1)+1)  / obj.fx * 1e3;
+            y = (1: Bwin(end)-Bwin(1)+1)  / obj.fy * 1e3;
+            z = (1: size(inph_visual, 3)) / obj.fs * 1e6;
+            %             ax = subplot(1, 1, 1);
+            if (B_type == 'x')
+                % B scan image
+                B_scan = squeeze(inph_visual(Bwin, index, :));
+                % surfaecs xslice
+                if ~isnan(obj.front)
+                    sur_f   = obj.front_I(Bwin, index)/ obj.fs * 1e6;
+                    sur_r   = obj.rear_I(Bwin, index)/ obj.fs * 1e6;
+                end
+                x_slice = index * ones(1, size(inph_visual, 1));
+                y_index = x;
+            elseif (B_type == 'y')
+                % B scan image
+                B_scan = squeeze(inph_visual(index, Bwin, :));
+                % surfaecs yslice
+                if ~isnan(obj.front)
+                    sur_f   = obj.front_I(index, Bwin)/ obj.fs * 1e6;
+                    sur_r   = obj.rear_I(index, Bwin)/ obj.fs * 1e6;
+                end
+                x_slice = index * ones(1, size(inph_visual, 2));
+                y_index = x;
+                % choose the 'x' axis
+                x       = y;
+            end
+            % apply hilbert
+            for i = 1:size(B_scan, 1)
+                B_scan(i, :) = hilbert(B_scan(i, :));                
+            end
+            %             %remove the direct component
+            %             B_scan = B_scan - mean(B_scan, 2);
+            AS_bscan       = B_scan';
+            inph_ex        = angle(AS_bscan);
+            inam_ex        = abs(AS_bscan);
+            inph_ex_unwarp = unwrap(inph_ex(end:-1:1, :), [], 1);  % reverse the array for correct differiatien
+            infq_ex        = diff(inph_ex_unwarp, 1, 1) /2 / pi * obj.fs;
+            infq_ex        = infq_ex(end:-1:1, :); % reverse bakc
+            % ***** plot inam
+            cf = figure('Name', ['Bscan' '_', B_type, '_', num2str(index), '_inam']);
+            set(cf, 'Position', [0, 0, 600, 600], 'color', 'white');
+            imagesc(x, z, inam_ex);
+            hold on;
+            % surfaecs slice
+            if ~isnan(obj.front)
+                h1 = scatter(y_index, sur_f, 2, 'red', 'filled', ...
+                    'DisplayName','Front surface');
+                hold on;
+                h2 = scatter(y_index, sur_r, 2, 'magenta', 'filled', ...
+                    'DisplayName','Rear surface');
+                legend([h1 h2], 'Front surface', 'Rear surface');
+                hold on;
+            end
+            % figure setup
+            colormap(jet);
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            set(gca, 'Fontname', 'times new Roman');
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} TOF (\mus)', 'fontsize', 16);
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 2);
+            cl = caxis;
+            caxis(cl / 1.5);
+            % ***** plot inph ************
+            cf = figure('Name', ['Bscan' '_', B_type, '_', num2str(index), '_inph']);
+            set(cf, 'Position', [0, 0, 600, 600], 'color', 'white');
+            imagesc(x, z(2:end), inph_ex);
+            hold on;
+            % surfaecs slice
+            if ~isnan(obj.front)
+                h1 = scatter(y_index, sur_f, 2, 'red', 'filled', ...
+                    'DisplayName','Front surface');
+                hold on;
+                h2 = scatter(y_index, sur_r, 2, 'magenta', 'filled', ...
+                    'DisplayName','Rear surface');
+                legend([h1 h2], 'Front surface', 'Rear surface');
+                hold on;
+            end
+            % figure setup
+            colormap(gray);
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Phase (rad.)');
+            set(gca, 'Fontname', 'times new Roman');
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} TOF (\mus)', 'fontsize', 16);
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 2);
+            % ***** plot infq
+            cf = figure('Name', ['Bscan' '_', B_type, '_', num2str(index), '_infq']);
+            set(cf, 'Position', [0, 0, 600, 600], 'color', 'white');
+            imagesc(x, z, infq_ex/1e6);
+            hold on;
+            % surfaecs slice
+            if ~isnan(obj.front)
+                h1 = scatter(y_index, sur_f, 2, 'red', 'filled', ...
+                    'DisplayName','Front surface');
+                hold on;
+                h2 = scatter(y_index, sur_r, 2, 'magenta', 'filled', ...
+                    'DisplayName','Rear surface');
+                legend([h1 h2], 'Front surface', 'Rear surface');
+                hold on;
+            end
+            % figure setup
+            colormap(jet);
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Freq. (MHz)');
+            set(gca, 'Fontname', 'times new Roman');
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} TOF (\mus)', 'fontsize', 16);
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 2);
+            caxis([-20 30]);
         end
         
         %************************* C-scan analysis ************************
@@ -767,18 +892,37 @@ classdef class_process_woven_RFdata < class_process_RFdata
         end
         
         % ************************ 3D fft *********************************
-        function obj = nDfft(obj)
+        function obj = nDfft(obj, ra, rb, rc, F_type)
             % perform 3d fft on the original img
-            [lx, ly, lz] = size(obj.img);
-            l = nextpow2(lx);
-            m = nextpow2(ly);
-            n = nextpow2(lz);
-            ndfft = fftn(obj.img, [2^l 2^m 2^n]);
-            ndfft = fftshift(ndfft);
+            img_temp = obj.img_hil; % apply fft on the analytic-signal directly
+%             [lx, ly, lz] = size(img_temp);
+%             l = nextpow2(lx);
+%             m = nextpow2(ly);
+%             n = nextpow2(lz);
+%             ndfft = fftn(img_temp, [2^l 2^m 2^n]);
+%             ndfft = fftshift(ndfft);   
+            img_filtered2 = fx_lowpass_3dfft(img_temp, ra, rb, rc, F_type);
+
             % f = obj.fs * (0:(l / 2)) / l;
-            obj.img_3dfft = ndfft;
+            obj.img_3dfft  = ndfft;
+            obj.img_fftfilter =img_filtered2;
         end
         
+        function obj = hilbert_property(obj, propertyName)
+            img_temp    = obj.(propertyName);
+            img_hilbert = nan(size(img_temp));
+            for i = 1: size(img_hilbert, 1)
+%                 for j = 1:size(img_hilbert, 2)
+%                     
+%                 end
+                bscan     = squeeze(img_temp(i, :, :));
+                bscan_hil = hilbert(bscan.'); %　hilbert for each colume at 2D matrix
+                img_hilbert(i, :, :) = bscan_hil.'; %　hilbert for each colume at 2D matrix
+                clc;
+                disp([num2str(i) '/' num2str(size(img_hilbert, 1))]);
+            end
+            obj.img_hil_filter = img_hilbert;
+        end
         % ************************ determine defect size ******************
         function obj = amplitude_drop_method(obj, PropertyName, zrange, drop, filtertype)
             % determine thoverall size of image damagas
@@ -791,6 +935,36 @@ classdef class_process_woven_RFdata < class_process_RFdata
             amp_max  = max(img_temp, [], 3, 'omitnan');
             % plot the 2d spectrum
             [m, n] = size(amp_max);
+            
+%             % ************* debug and EDA ***************** %
+%             inam_ex  = abs(obj.img_hil);
+%             inph_ex  = angle(obj.img_hil);
+%             infq_ex  = diff(unwrap(inph_ex, [], 3), 1, 3) /2 / pi * obj.fs;
+%             
+%             infq_ex_single = infq_ex>10e6;
+%             infq_ex_single(infq_ex>10e6) = 100;
+%             infq_ex_single(infq_ex<2e6) = -100;
+%             infq_ex_single(infq_ex>2e6 & infq_ex<10e6) = 0;               
+% %             volumeViewer(inph_ex);
+%             close all;
+%             temp   = inph_ex(:,:,600); % select the range
+%             Xd     = (1: m) / obj.fx * 1e3;
+%             Yd     = (1: n) / obj.fy * 1e3;
+%             figure, imagesc(Yd, Xd, temp);
+%             % now make 2D fft of original image
+%             nfftx = 2^nextpow2(m);
+%             nffty = 2^nextpow2(n);
+%             nfftx = max(nfftx, nffty); % cannot tackle the issue of different nfftx and nffty.
+%             nffty = max(nfftx, nffty);
+%             %
+%             fft2D         = fft2(temp, nfftx, nffty);
+%             fft2D_shifted = fftshift(fft2D);
+%             X              = -nfftx/2+1: nfftx/2;
+%             Y              = -nffty/2+1:nffty/2;
+%             figure, imagesc(X, Y, 20*log10(abs(fft2D_shifted)/m/n)); % divide by the x and y length: nfftx and nffty
+%             axis image;
+%             % ************* end EDA ***************** %
+            
             % now make 2D fft of original image
             nfftx = 2^nextpow2(m);
             nffty = 2^nextpow2(n);
@@ -853,7 +1027,6 @@ classdef class_process_woven_RFdata < class_process_RFdata
 %                 h = colorbar;
 %                 set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
 %             end
-
             % find the average peak amplitudes
             amp_max_mean = mean(amp_max_filter, 'all');
             log_amp_max  = 20*log10(amp_max_filter);

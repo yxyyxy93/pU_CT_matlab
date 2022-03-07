@@ -32,10 +32,12 @@ process3               = process3.read_origin_data; % read (reset) the dataset
 FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Woven_samples\BP1_3_025m\";   % the destination folder
 save(strcat(FolderName, Filename1(1:end-4), 'mat'), '-v7.3');
 
-load(strcat(FolderName, 'V313\20220207_BP1_3_025m_V313_25db_PEmat.mat'));
+load(strcat(FolderName,'20220301_BP1_3_025m_h5m_15db_2_PEmat.mat'));
 
 % 20220207_BP1_3_025m_V313_25db_PEmat.mat
 % 20220207_BP1_3_025m_V313_25db_DTmat
+
+
 %% remove DC component and apply hilbert
 
 PropertyName = 'img';
@@ -46,36 +48,46 @@ process3.show_img_shape;
 % cut the img, otherwise it could be out of the memory
 % window = [101 180 81 160 1 1500]; 
 % window = [1 120 151 300 1 1500]; 
-window   = [1 300 1 340 1 1400];  
+window   = [50 300 75 400 100 1500];  
 x_step   = 1;
 y_step   = 1;
 process3 = process3.cut_edges(window, x_step, y_step);
 process3.show_img_shape;
-% 3D viewer
 
+% 3D viewer
 volumeViewer(abs(process3.img_hil));
+s = orthosliceViewer(abs(process3.img_hil), 'Colormap', jet, 'DisplayRange', [-20e6 30e6]...
+    , 'ScaleFactors', [1 1 0.2]);
 
 %% show A scan
 
 % define the index to select Ascan 
-x           = 45;
+x           = 145;
 y           = 45;
-process3.demo_AS_3D_inclinfq(x, y);
+% process3.demo_AS_3D_inclinfq(x, y);
 process3.show_hilbert_Ascan(x, y);
 
 %%
 % Bscan origin
 close all;
 
-B_type = 'x';
-index = 348;
-Bwin  = 1:270;
+B_type = 'y';
+index = 340;
+Bwin  = 1:500;
 PropertyName = 'img_hil';
 process3.demo_Bscan_inst(B_type, index, Bwin, PropertyName);
 
+%% 3D
+xslice =  100/ process3.fx * 1e3;
+yslice = 100 / process3.fy * 1e3;
+zslice = 0 / process3.fs * 1e3 * 3000/2;
+            
+process3.show_inaminph_3D(xslice, yslice, zslice);
+
+
 %% show C scan
 % define the index to select Ascan 
-z            = 300;
+z            = 500;
 PropertyName = 'img_hil';
 process3.show_Cscan(z, PropertyName);
 
@@ -127,7 +139,7 @@ snr                    = process3.calculate_SNR(win_signal, win_noise);
 process3               = process3.align_refer_ascan(x, y); 
 
 %% low-pass filter
-bandpassFreq = 30e6;
+bandpassFreq = 10e6;
 
 process3 = process3.Filter_lowpass(bandpassFreq, 'img_hil');
 
@@ -152,21 +164,22 @@ process3      = process3.apply_deconvolutions_onlyWiener(q_factor, ker_wid);
 PropertyName = 'img_hil_filter';
 MinPD        = 25;
 MinPH        = 0.01;  % these 2 parameters need to be changed for surface estimation.
-alpha        = 4e-3;
-% A_ratio      = 0.9;
-A_ratio      = 0.95;
-% max_len  = 1499;
-max_len  = 1400;
+alpha        = 5e-3;
+A_ratio      = 0.8;
+% A_ratio      = 0.95;
+max_len  = 1499;
+% max_len  = 1250;
 
 % process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
-x = 134;
-y = 348;
+x = 194;
+y = 204;
 
 % process3.show_Ascan_inam_peaks(x, y, MinPD, MinPH, PropertyName); % x, y
 %
 process3.find_front_amp_alpha_Ascan(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio, x, y)
    
-%%
+%% other propertyname
+
 PropertyName = 'img_hil';
 % PropertyName = 'img_WienerDeconv';
 MinPD        = 25;
@@ -174,8 +187,8 @@ MinPH        = 0.003;  % these 2 parameters need to be changed for surface estim
 alpha        = 5e-3;
 % A_ratio      = 0.9;
 A_ratio      = 0.95;
-% max_len  = 1499;
-max_len  = 1400;
+max_len  = 1499;
+% max_len  = 1400;
 
 % process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
 % x = 111;
@@ -260,7 +273,7 @@ process3.find_front_amp_alpha_Ascan(MinPD, MinPH, PropertyName, max_len, alpha, 
 
 %% filtered
 f0        = 6.5e6;
-sigma     = 0.7;
+sigma     = 0.5;
 
 % for debug
 % threshold = 0.05;
@@ -335,6 +348,52 @@ yslice = 185 / process3.fy * 1e3;
 zslice = [];
 process3.show_interply_track_3D_knn(xslice, yslice, zslice);
 
+%% 3D fft filter 
+
+% apply 3d fft and LP filter (ellipsoid shape)
+F_type   = 'ideal';
+ra       = 50;
+rb       = 50;
+rc       = 200;
+process3 = process3.nDfft(ra, rb, rc, F_type);
+
+% %
+% sum_fx = squeeze(sum(abs(process3.img_3dfft), 1));
+% sum_yf = squeeze(sum(abs(process3.img_3dfft), 2));
+% sum_xy = squeeze(sum(abs(process3.img_3dfft), 3));
+% F_type = 'ideal';
+% ra = 30;
+% rb = 30;
+% rc = 170;
+% img_filtered2 = fx_lowpass_3dfft(process3.img, ra, rb, rc, F_type);
+% sliceViewer(process3.img, 'colormap', jet);
+
+%%
+% Bscan origin
+close all;
+
+B_type = 'y';
+index = 110;
+Bwin  = 1:350;
+PropertyName = 'img_fftfilter';
+process3.demo_Bscan_inst_needHilbert(B_type, index, Bwin, PropertyName);
+
+% transfer real signal to analytic signal
+PropertyName = 'img_fftfilter';
+process3 = process3.hilbert_property(PropertyName);
+
+B_type = 'y';
+index = 340;
+Bwin  = 1:500;
+PropertyName = 'img_hil_filter';
+process3.demo_Bscan_inst(B_type, index, Bwin, PropertyName);
+
+B_type = 'y';
+index = 110;
+Bwin  = 1:350;
+PropertyName = 'img_hil';
+process3.demo_Bscan_inst(B_type, index, Bwin, PropertyName);
+
 %% 3D monogenic signal analysis
 clc;
 D         = process3.img;
@@ -344,8 +403,8 @@ cw_xy = 5;
 cw_z  = 250e6/15e6;
 
 % woven strucutre
-cw_xy = 40;
-cw_z  = 250e6/15e6;
+cw_xy = 5;
+cw_z  = 250e6/5e6;
 
 % Now use these wavelengths to create a structure containing
 % frequency-domain filters to calculate the monogenic signal. Same as for
@@ -376,7 +435,9 @@ x = 45;
 y = 45;
 figure,plot(squeeze(LA(x, y, :)));
 
-volumeViewer(LA);
+close all;
+orthosliceViewer(LA, 'Colormap', jet, 'ScaleFactors', [1 1 0.25]);
+% volumeViewer(LA);
 
 %% 3D monogenic signal display
 % Display one slice
@@ -421,10 +482,10 @@ imgshow = [squeeze(FS(:,xslice,:)),squeeze(FA(:,xslice,:))];
 imagesc(rot90(imgshow, 3)), axis image, colormap jet
 title('3D Feature Symmetry and Asymmetry');
 
-%% save all figures"z
+%% save all figures"
 % "F:\Xiayang\results\Woven_samples\01032021_12h31m02s\f_5_omega07"
 % "F:\Xiayang\results\Woven_samples\01032021_12h31m02s\f_10_omega07"
-FolderName = "F:\Xiayang\results\Woven_samples\01032021_12h31m02s\f_10_omega07";   % the destination folder
+FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Woven_samples\BP1_3_025m";   % the destination folder
 FigList = findobj(allchild(0), 'flat', 'Type', 'figure');
 for iFig = 1:length(FigList)
   FigHandle = FigList(iFig);

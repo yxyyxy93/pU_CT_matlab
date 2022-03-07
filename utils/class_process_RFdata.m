@@ -428,6 +428,14 @@ classdef class_process_RFdata
             if isempty(inph_ex)
                 inph_ex = obj.Inplane_direction_3D_ID;
             end
+            s = orthosliceViewer(infq_ex, 'Colormap', jet, 'DisplayRange', [-20e6 30e6]...
+                , 'ScaleFactors', [1 1 0.2]);
+            %             s = orthosliceViewer(inam_ex, 'Colormap', jet, 'DisplayRange', [0 .5]...
+            %                 , 'ScaleFactors', [1 1 0.2]);
+            %             s = orthosliceViewer(inph_ex, 'Colormap', jet, 'ScaleFactors', [1 1 0.2]);
+            %
+%             Scrollable_3d_view(inam_ex);
+            
             y = (0: size(inam_ex, 1) - 1) / obj.fx * 1e3;
             x = (0: size(inam_ex, 2) - 1) / obj.fy * 1e3;
             z = (0: size(inam_ex, 3) - 1) / obj.fs * 1e3 * 3000/2;
