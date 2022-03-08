@@ -5512,17 +5512,17 @@ classdef class_process_RFdata
             % imagename: the name of the 2d image
             % ***
             % fillna
-            C_scan_inam_RT           = obj.(imagename);
-            NaN_part                 = isnan(C_scan_inam_RT);
+            C_scan_inam_RT     = obj.(imagename);
+            NaN_part           = isnan(C_scan_inam_RT);
 %             % fill nan
 %             C_scan_inam_RT           = fx_inpaint_nans(C_scan_inam_RT, 5);
             %             C_scan_inam_RT(isnan(C_scan_inam_RT)) = mean(C_scan_inam_RT, 'all', 'omitnan');
-            [lxc, lyc]               = size(C_scan_inam_RT);
-            ID                       = NaN(lxc, lyc, length(radius), length(theta));
+            [lxc, lyc]         = size(C_scan_inam_RT);
+            ID                 = NaN(lxc, lyc, length(radius), length(theta));
             %             ID_gyy = NaN(lxc, lyc, length(radiis), length(theta));
             % pad the C_scan_inam matrix
-            r_max                    = max(radius);
-            C_scan_inam_RT_pad       = C_scan_inam_RT;
+            r_max              = max(radius);
+            C_scan_inam_RT_pad = C_scan_inam_RT;
             %             C_scan_inam_RT_pad       = padarray(C_scan_inam_RT, [r_max r_max], mean(C_scan_inam_RT, 'all', 'omitnan'));
             % check the nan and adjust the radii
             [r_nan, l_nan] = find(NaN_part);
@@ -5534,7 +5534,7 @@ classdef class_process_RFdata
                         continue;
                     end
                     for r_idx = 1: length(radius)
-                        r          = radius(r_idx);
+                        r = radius(r_idx);
 %                         check the nan and adjust the radii
                         distances = sqrt((r_nan-i).^2 + (l_nan-j).^2);
                         if r > min(distances)

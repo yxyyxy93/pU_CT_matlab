@@ -32,6 +32,7 @@ x_step   = 1;
 y_step   = 1;
 process3 = process3.cut_edges(window, x_step, y_step);
 process3.show_img_shape;
+
 % 
 %% surface calculation
 % x: x index
@@ -65,7 +66,6 @@ process3.show_surfaces(filename_fig(1:end-5));
 % yslice = 10 / process3.fy * 1e3;
 % zslice = 2.4; % us
 % process3.show_inaminph_3D(xslice, yslice, zslice);
-
 
 %% averaging testing; one-plane EDA
 

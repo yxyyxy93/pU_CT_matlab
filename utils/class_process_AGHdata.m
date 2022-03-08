@@ -17,7 +17,7 @@ classdef class_process_AGHdata < class_process_RFdata
             [B, scanSet.noA, scanSet.noP] = loadBin([path_load '0avg.bin']);
             
             % allocatin  g space
-            img_origin = zeros(n_files, scanSet.noA, scanSet.noP);
+            img_origin = single(zeros(n_files, scanSet.noA, scanSet.noP));
             
             % loop for loading
             for f_index = 0 : n_files-1
@@ -34,7 +34,7 @@ classdef class_process_AGHdata < class_process_RFdata
             end
             
             [lx, ly, lz] = size(img_origin);
-            img_hilbert = zeros(lx, ly, lz);
+            img_hilbert = single(zeros(lx, ly, lz));
             for i = 1:lx
                 for j = 1:ly
                     img_hilbert(i, j, :) = hilbert(img_origin(i, j, :));
@@ -57,6 +57,7 @@ classdef class_process_AGHdata < class_process_RFdata
                 fprintf('normalization progress: %0.2f%%\n',100*i/lx);
             end%;
             obj.img_hil = img_temp;
+            clear img_temp;
         end
         
         % *******************in-plane orientaion extraction plus *******
@@ -304,9 +305,9 @@ classdef class_process_AGHdata < class_process_RFdata
             row_ga                    = length(wavelength);
             col_ga                    = length(orientation);
             wl_max                    = round(max(wavelength)/2);
-            Inplane_direction         = NaN(size(obj.(PropertyName)));
-            Inplane_direction_overall = NaN(size(obj.(PropertyName)));
-            ID_sum_all = NaN(length(z)-1, length(wavelength), length(orientation));
+            Inplane_direction         = single(NaN(size(obj.(PropertyName))));
+%             Inplane_direction_overall = single(NaN(size(obj.(PropertyName))));
+%             ID_sum_all = NaN(length(z)-1, length(wavelength), length(orientation));
             %
             disp('gaborMagnitude calculation...');
             for i = 1:(length(z)-1)
@@ -335,7 +336,7 @@ classdef class_process_AGHdata < class_process_RFdata
                     end
                 end
                 % search for the max
-                ID_sum   = zeros(length(wavelength), length(orientation));
+%                 ID_sum   = zeros(length(wavelength), length(orientation));
                 [lx, ly] = size(gaborMagnitude(:, :, 1));
                 for ii = wl_max + 1: lx - wl_max
                     for jj = wl_max + 1: ly - wl_max
@@ -348,23 +349,23 @@ classdef class_process_AGHdata < class_process_RFdata
                         [~, indAng] = ind2sub(size(ID),I);
                         Inplane_direction(ii, jj, upper_index_bound: ...
                             lower_index_bound-1) = orientation(indAng);
-                        % sum up the ID
-                        ID_sum = ID_sum + ID;
+%                         % sum up the ID
+%                         ID_sum = ID_sum + ID;
                     end
                 end
-                % save the summary ID
-                ID_sum_all(i, :, :) = ID_sum;
-                [~, I]              = max(ID_sum(:));
-                [~, indAng]         = ind2sub(size(ID_sum),I);
-                Inplane_direction_overall(:, :, upper_index_bound: ...
-                    lower_index_bound) = orientation(indAng);
+%                 % save the summary ID
+%                 ID_sum_all(i, :, :) = ID_sum;
+%                 [~, I]              = max(ID_sum(:));
+%                 [~, indAng]         = ind2sub(size(ID_sum),I);
+%                 Inplane_direction_overall(:, :, upper_index_bound: ...
+%                     lower_index_bound) = orientation(indAng);
                 % end loop in one Cscan
                 clc;
                 fprintf('ID 3D progress: %0.2f%%\n',100*i/(length(z)-1));
             end
             obj.Inplane_direction_3D_ID         = Inplane_direction;
-            obj.Inplane_direction_3D_overall_ID = Inplane_direction_overall;
-            obj.ID_sum_overall_ID               = ID_sum_all;
+%             obj.Inplane_direction_3D_overall_ID = Inplane_direction_overall;
+%             obj.ID_sum_overall_ID               = ID_sum_all;
         end
         
         % ******************** 2d fft **********************

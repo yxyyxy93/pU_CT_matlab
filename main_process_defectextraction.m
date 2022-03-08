@@ -16,8 +16,8 @@ process3               = class_process_woven_RFdata(filename);
 
 % input the settings 
 process3.fs = 250e6; % MHz
-process3.fx = 1 / 0.2e-3; % unit: 1 / m
-process3.fy = 1 / 0.2e-3; % unit: 1 / m
+process3.fx = 1 / 0.25e-3; % unit: 1 / m
+process3.fy = 1 / 0.25e-3; % unit: 1 / m
 
 % % read the settings from excel
 % [Filename1, Pathname1] = uigetfile({'*.xlsx'}, 'select the file');
@@ -72,8 +72,8 @@ process3.show_hilbert_Ascan(x, y);
 close all;
 
 B_type = 'y';
-index = 340;
-Bwin  = 1:500;
+index = 200;
+Bwin  = 1:400;
 PropertyName = 'img_hil';
 process3.demo_Bscan_inst(B_type, index, Bwin, PropertyName);
 

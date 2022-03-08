@@ -89,7 +89,7 @@ angle_compens = 0;
 imagename     = 'C_scan_inam';
 
 % Radontransform
-theta       = [1:23 68:180];
+theta       = [1:1:180 ];
 radiis      = 20;
 process    = process.compute_orientation_by_RT_correct(radiis, theta, imagename);
 
@@ -101,8 +101,7 @@ process.show_orientation_by_ID_RT(radiis, theta, imagename, angle_compens);
 %%
 % 2d log-Gabor fitler
 wavelength  = 8:4:40;
-% orientation = 1:1:180;
-orientation = [1:23 68:180];
+orientation = 1:1:180;
 SFB         = 1; % [0.5 2.5]
 SAR         = 0.5; % [0.23 0.92]
 % imagename = 'C_scan_inam_denoise';
@@ -147,11 +146,9 @@ zslice        = []; % us
 angle_compens = 0;
 process.show_inplane_direction_3D(xslice, yslice, zslice, angle_compens);
 
-%%
 % 2D log-Gabor filter
 wavelength  = 8:4:40;
-% orientation = 1:1:180;
-orientation = [1:23 68:180];
+orientation = 1:1:180;
 K           = 2e0;
 % sigma              = 5e-4;
 sigma       = 0;
