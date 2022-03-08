@@ -32,18 +32,21 @@ classdef class_process_AGHdata < class_process_RFdata
                 %assign in 3D matrix
                 img_origin(f_index+1, :, :) = B.';
             end
-            
             [lx, ly, lz] = size(img_origin);
             img_hilbert = single(zeros(lx, ly, lz));
             for i = 1:lx
-                for j = 1:ly
-                    img_hilbert(i, j, :) = hilbert(img_origin(i, j, :));
-                end
+                bscan     = squeeze(img_origin(i, :, :));
+                bscan_hil = hilbert(bscan.'); %　hilbert for each colume at 2D matrix
+                img_hilbert(i, :, :) = bscan_hil.'; %　hilbert for each colume at 2D matrix
+            
+%                 for j = 1:ly
+%                     img_hilbert(i, j, :) = hilbert(img_origin(i, j, :));
+%                 end
                 clc
                 fprintf('Hilbert progress: %0.2f%%\n',100*i/lx)
             end
-            obj.img = single(img_origin);
-            obj.img_hil = single(img_hilbert);
+            obj.img = img_origin;
+            obj.img_hil = img_hilbert;
         end
         
         function obj = normalize_timeAxis(obj)
@@ -343,9 +346,9 @@ classdef class_process_AGHdata < class_process_RFdata
                         ID     = squeeze(gaborMagnitude(ii, jj, :));
                         ID     = reshape(ID, [row_ga, col_ga]);
                         [C, I] = max(ID(:));
-                        if C <= mean(ID,'all') + std(ID, 0, 'all') % no significate maximum, thus skip
-                            continue;
-                        end
+%                         if C <= mean(ID,'all') + std(ID, 0, 'all') % no significate maximum, thus skip
+%                             continue;
+%                         end
                         [~, indAng] = ind2sub(size(ID),I);
                         Inplane_direction(ii, jj, upper_index_bound: ...
                             lower_index_bound-1) = orientation(indAng);

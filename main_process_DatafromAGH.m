@@ -73,11 +73,16 @@ process.check2dfft(z, PropertyName);
 
 %% normalize along time domain;
 
-process.normalize_timeAxis
+process.normalize_timeAxis;
 
 %%
 % 3D viewer
 sliceViewer(abs(process.img_hil));
+
+%%
+z = 100;
+PropertyName = 'img_hil';
+process = process.show_Cscan(z, PropertyName);
 
 %% one-plane EDA
 % define the C_scan_inam as well
@@ -100,7 +105,7 @@ process.show_orientation_by_ID_RT(radiis, theta, imagename, angle_compens);
 
 %%
 % 2d log-Gabor fitler
-wavelength  = 8:4:40;
+wavelength  = 16:8:80;
 % orientation = 1:1:180;
 orientation = [1:23 68:180];
 SFB         = 1; % [0.5 2.5]
@@ -127,7 +132,6 @@ tic;
 process = process.compute_orientation_monogenicsignal(imagename, cw);
 toc;
 
-
 %% 'distance to front and rear' in-plane orientation extraction
 % RT
 % % PropertyName  = 'img_hil';
@@ -152,6 +156,7 @@ process.show_inplane_direction_3D(xslice, yslice, zslice, angle_compens);
 wavelength  = 8:4:40;
 % orientation = 1:1:180;
 orientation = [1:23 68:180];
+z           = 1:5:650;  
 K           = 2e0;
 % sigma              = 5e-4;
 sigma       = 0;
@@ -177,7 +182,8 @@ Stacking_sequence = [
     45 0 -45 -90 ...
     -90 -45 0 45 ...
     -90 -45 0 45 ...
-    -90 -45 0 45];
+    -90 -45 0 45
+    ];
 m_fiber_angle_arr   = NaN(1, 24);
 std_fiber_angle_arr = NaN(1, 24);
 Idof_N_arr          = NaN(24, 180);
