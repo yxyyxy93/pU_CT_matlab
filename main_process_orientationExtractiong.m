@@ -21,8 +21,6 @@ process3               = process3.loadSettings(settinig_file);
 process3               = process3.read_origin_data; % read (reset) the dataset
 
 
-class_process_AGHdata
-
 %% window cutting
 % process2.show_img_shape;
 window   = [51 350 1 300 1 1400];

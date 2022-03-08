@@ -43,10 +43,9 @@ load(strcat(FolderName, '20170406_0757.mat'));
 
 %% window cut
 % window = [101 180 81 160 1 1500]; 
-% window = [1 120 151 300 1 1500]; 
-window   = [101 300 101 300 1 650];  
-x_step   = 1;
-y_step   = 1;
+window   = [1 1400 1 1400 1 1400];
+x_step   = 4;
+y_step   = 4;
 process  = process.cut_edges(window, x_step, y_step);
 process.show_img_shape;
 
