@@ -11,7 +11,7 @@ addpath('utils_AGH');
 %%
 % path to file
 path_load='F:\Xiayang\fromAGH\20170406_0757\';
-path_load='C:\Users\xiayang\OneDrive - UGent\lab\experiment\fromAGH\20170406_0757\';
+% path_load='C:\Users\xiayang\OneDrive - UGent\lab\experiment\fromAGH\20170406_0757\';
 
 % read paramters of given scan
 scanSet = readXMLscanner2([path_load 'info.xml']);
@@ -44,21 +44,61 @@ load(strcat(FolderName, '20170406_0757.mat'));
 %% window cut
 % window = [101 180 81 160 1 1500]; 
 % window = [1 120 151 300 1 1500]; 
-window   = [101 300 101 300 1 650];  
-x_step   = 1;
-y_step   = 1;
+window   = [1 1400 1 1400 1 650];  
+x_step   = 4;
+y_step   = 4;
 process  = process.cut_edges(window, x_step, y_step);
 process.show_img_shape;
+
+%% show A scan
+
+% define the index to select Ascan 
+x           = 170;
+y           = 170;
+% process3.demo_AS_3D_inclinfq(x, y);
+process.show_hilbert_Ascan(x, y);
 
 %% show C scan
 % define the index to select Ascan 
 close all;
-for z = 100:5:105
+for z = 200:5:205
     % z            = ;
     PropertyName = 'img_hil';
 %     process = process.show_Cscan(z, PropertyName);
     process.check2dfft(z, PropertyName); % 2d spectrum
 end
+
+%% surface searching
+x = 160;
+y = 120;
+
+PropertyName = 'img_hil';
+% PropertyName = 'img_WienerDeconv';
+MinPD        = 25;
+MinPH        = 0.003;  % these 2 parameters need to be changed for surface estimation.
+alpha        = 5e-3;
+% A_ratio      = 0.9;
+A_ratio      = 0.5;
+max_len      = 650;
+% max_len  = 1400;
+
+% process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
+% x = 111;
+% y = 224;
+
+% process3.show_Ascan_inam_peaks(x, y, MinPD, MinPH, PropertyName); % x, y
+%
+process.find_front_amp_alpha_Ascan(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio, x, y)
+
+%%
+% surface calculation
+% A_ratio      = 0.4; % for 0.3 m drop
+process     = process.find_front_amp_alpha(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio);
+filename_fig = 'test';
+process.show_surfaces(filename_fig(1:end-5));
+
+% tackle the problem of walls determination
+TOF_walls    = -mean(process.front_I-process.rear_I, 'all', 'omitnan');
 
 %% 2d slice and 2d fft
 % 
@@ -73,11 +113,11 @@ process.check2dfft(z, PropertyName);
 
 %% normalize along time domain;
 
-process.normalize_timeAxis;
+process = process.normalize_timeAxis;
 
 %%
 % 3D viewer
-sliceViewer(abs(process.img_hil));
+orthosliceViewer(abs(process.img_hil), 'colormap', jet, 'ScaleFactors', [1 1 0.2]);
 
 %%
 z = 100;
