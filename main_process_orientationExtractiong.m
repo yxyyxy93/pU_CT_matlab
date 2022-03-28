@@ -100,7 +100,6 @@ process3    = process3.compute_logGabor_filter_withoutFig(PropertyName, waveleng
 K = 0.5e0;
 process3.show_orientation_by_ID_allwl(wavelength, orientation, K, imagename, angle_compens);
 
-
 %% 'distance to front and rear' in-plane orientation extraction
 % RT
 % % PropertyName  = 'img_hil';

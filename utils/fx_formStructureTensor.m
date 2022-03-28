@@ -3,7 +3,7 @@ function ST = fx_formStructureTensor(Gx, Gy, Gz)
 
 [lx, ly, lz] = size(Gx);
 
-ST = zeros(lx, ly, lz, 3, 3);
+ST = single(zeros(lx, ly, lz, 3, 3));
 
 disp("start forming the ST");
 

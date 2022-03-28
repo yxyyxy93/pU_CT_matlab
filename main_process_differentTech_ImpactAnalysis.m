@@ -221,9 +221,9 @@ process3.makeMovie_InterplyTrack(B_type, Bwin, property_name);
 %% structrul tensor 
 % out-of-plane angles
 % logGabor filtered
-f0_1     = 12.8e6;
-sigma0_1 = 0.8;
-process3 = process3.Filter_logGabor(f0_1, sigma0_1, 'img');
+f0_1     = 6.3e6;
+sigma0_1 = 0.7;
+process = process3.Filter_logGabor(f0_1, sigma0_1, 'img');
 
 % smoothing scale
 ds_rate      = 1;
@@ -612,22 +612,25 @@ sigma1       = [3, 3, 3];
 sigma2       = [3, 3, 3];
 PropertyName = 'img_hil_filter';
 process3     = process3.structural_tensor(sigma1, sigma2, PropertyName, ds_rate);
-% display the angles 3d slices
-medf_kernel  = [3, 3, 3];
-xslice       = 175 / process3.fx * 1e3;
-yslice       = 175 / process3.fx * 1e3;
-zslice       = [];
-process3.show_angles_ST_zangle(medf_kernel, xslice, yslice, zslice, ds_rate);
+
+% % display the angles 3d slices
+% medf_kernel  = [3, 3, 3];
+% xslice       = 175 / process3.fx * 1e3;
+% yslice       = 175 / process3.fx * 1e3;
+% zslice       = [];
+% process3.show_angles_ST_zangle(medf_kernel, xslice, yslice, zslice, ds_rate);
+
 %
 B_type     = 'x';
 index      = 125;
 Bwin       = 1:250;
-process3.show_angles_ST_Bscan(B_type, index, Bwin);
+process.show_angles_ST_Bscan(B_type, index, Bwin);
+
 %
 B_type     = 'y';
 index      = 125;
 Bwin       = 1:250;
-process3.show_angles_ST_Bscan(B_type, index, Bwin);
+process.show_angles_ST_Bscan(B_type, index, Bwin);
 
 %% one-plane EDA
 % 2D demo
@@ -796,9 +799,9 @@ for p = 1:24 % 24 layers for default
     Idof_N_arr(p,:) = process3.calculate_angle_distrib(PropertyName, PropertyName_IFD, ratio, angle_compens);
     %
     %     % normalize
-%     Idof_N_arr(p,:) = (Idof_N_arr(p,:)) / sum(Idof_N_arr(p,:));
-%     % log
-%     Idof_N_arr(p,:) = log(Idof_N_arr(p,:));
+    %     Idof_N_arr(p,:) = (Idof_N_arr(p,:)) / sum(Idof_N_arr(p,:));
+    %     % log
+    %     Idof_N_arr(p,:) = log(Idof_N_arr(p,:));
     disp([num2str(p) '/' '24']);
     if p==3 || p==11 || p==22
         figure('Name', ['angle_distribution_' num2str(p) '_' PropertyName_IFD]);
@@ -809,7 +812,7 @@ for p = 1:24 % 24 layers for default
         %         ylabel('\fontname {times new roman} Percentage', 'fontsize', 16);
         set(gca, 'Fontname', 'times new Roman', 'FontSize', 16);
         set(gca, 'linewidth', 2);
-%         set(gca, 'YScale', 'log')
+        %         set(gca, 'YScale', 'log')
         %         legend([h1 h2], 'Angle distribution', 'Multiple Gaussian fitting', 'Interply track');
         %         ytickformat('percentage');
     end
@@ -850,7 +853,6 @@ for iFig = 1:length(FigList)
   saveas(gcf, strcat(FolderName, '\', FigName), 'pdf');
   saveas(gcf, strcat(FolderName, '\', FigName), 'fig');
 end
-
 
 %% save to bin file
 

@@ -10,15 +10,14 @@ addpath('utils_AGH');
 
 %%
 % path to file
-path_load='F:\Xiayang\fromAGH\20170406_0757\';
-% path_load='C:\Users\xiayang\OneDrive - UGent\lab\experiment\fromAGH\20170406_0757\';
+% path_load='F:\Xiayang\fromAGH\20170406_0757\';
+path_load='C:\Users\xiayang\OneDrive - UGent\lab\experiment\fromAGH\20170406_0757\';
 
 % read paramters of given scan
 scanSet = readXMLscanner2([path_load 'info.xml']);
 
 % number of files
 n_files = length(dir([path_load '*.bin']));
-
 
 %%
 % filename               = strcat(Pathname1, Filename1);
@@ -31,8 +30,23 @@ process.fy = 1 / 0.05e-3; % unit: 1 / m
 
 process = process.read_data_AGH(path_load, n_files);
 
+%% window cut
+% window = [101 180 81 160 1 1500]; 
+% window = [1 120 151 300 1 1500]; 
+window   = [1 1400 1 1400 1 650];  
+x_step   = 4;
+y_step   = 4;
+process  = process.cut_edges(window, x_step, y_step);
+process.show_img_shape;
+
+
+%% normalize along time axis, remove DC component, and apply hilbert
+
+process      = process.normalize_timeAxis_removeslope_hilbert;
+% process      = process.removeslope_hilbert;
+
 %% ***********
-FolderName = "F:\Xiayang\results\AGH_data\";   % the destination folder
+FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\AGH_data\";   % the destination folder
 C = strsplit(path_load,'\');
 save(strcat(FolderName, C{end-1}, '.mat'), '-v7.3');
 
@@ -41,31 +55,23 @@ load(strcat(FolderName, '20170406_0757.mat'));
 % '01032021_14h17m04s.mat'
 % '01032021_15h41m01s.mat'
 
-%% window cut
-% window = [101 180 81 160 1 1500]; 
-<<<<<<< HEAD
-window   = [1 1400 1 1400 1 1400];
-=======
-% window = [1 120 151 300 1 1500]; 
-window   = [1 1400 1 1400 1 650];  
->>>>>>> 11cafeb40c50996b69f1bef271289b2d83b78750
-x_step   = 4;
-y_step   = 4;
-process  = process.cut_edges(window, x_step, y_step);
-process.show_img_shape;
-
 %% show A scan
 
 % define the index to select Ascan 
-x           = 170;
-y           = 170;
-% process3.demo_AS_3D_inclinfq(x, y);
+x = 220;
+y = 138;
 process.show_hilbert_Ascan(x, y);
 
+%% show B scan (filter)
+B_type     = 'x';
+index      = 140;
+Bwin       = 1:350;
+process.demo_Bscan_inst_filter(B_type, index, Bwin, 'img_hil');
+    
 %% show C scan
 % define the index to select Ascan 
 close all;
-for z = 200:5:205
+for z = 200:50:200
     % z            = ;
     PropertyName = 'img_hil';
 %     process = process.show_Cscan(z, PropertyName);
@@ -73,16 +79,19 @@ for z = 200:5:205
 end
 
 %% surface searching
-x = 160;
-y = 120;
+global min_pks % minimum amplitude for FWE
+min_pks = 0.4;
+            
+x = 132;
+y = 113;
 
 PropertyName = 'img_hil';
 % PropertyName = 'img_WienerDeconv';
 MinPD        = 25;
 MinPH        = 0.003;  % these 2 parameters need to be changed for surface estimation.
-alpha        = 5e-3;
+alpha        = 7e-3;
 % A_ratio      = 0.9;
-A_ratio      = 0.5;
+A_ratio      = 0.9;
 max_len      = 650;
 % max_len  = 1400;
 
@@ -97,225 +106,128 @@ process.find_front_amp_alpha_Ascan(MinPD, MinPH, PropertyName, max_len, alpha, A
 %%
 % surface calculation
 % A_ratio      = 0.4; % for 0.3 m drop
-process     = process.find_front_amp_alpha(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio);
+process      = process.find_front_amp_alpha(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio);
 filename_fig = 'test';
 process.show_surfaces(filename_fig(1:end-5));
 
 % tackle the problem of walls determination
 TOF_walls    = -mean(process.front_I-process.rear_I, 'all', 'omitnan');
 
-%% 2d slice and 2d fft
-% 
-z            = 100;
-PropertyName = 'img_hil';
-% 
-% 2d fft filter
-% LP
+%% amplitude rise method to determine the defect depth - spatial filter
+clc;
 close all;
-
-process.check2dfft(z, PropertyName);
-
-%% normalize along time domain;
-
-process = process.normalize_timeAxis;
-
-%%
-% 3D viewer
-orthosliceViewer(abs(process.img_hil), 'colormap', jet, 'ScaleFactors', [1 1 0.2]);
-
-%%
-z = 100;
 PropertyName = 'img_hil';
-process = process.show_Cscan(z, PropertyName);
+zrange       = [450 500];
+drop         = 3; % dB
+sigma        = 1;
 
-%% one-plane EDA
-% define the C_scan_inam as well
-% PropertyName = 'img_WienerDeconv';
-% PropertyName = 'img_hil_filter';
-PropertyName  = 'img_hil';
-angle_compens = 0;
+process = process.amplitude_rise_oneimage_spatialfilter(PropertyName, zrange, drop, sigma);
 
-imagename     = 'C_scan_inam';
+%% amplitude rise method to determine the defect depth 3D - spatial filter
+PropertyName = 'img_hil';
+zrange       = [1 650];
+drop         = 3; % dB
+sigma        = 1;
+process = process.amplitude_rise_3D_spatialfilter(PropertyName, zrange, drop, sigma);
+process.show_surfaces(filename_fig(1:end-5));
 
-% Radontransform
-theta       = [1:23 68:180];
-radiis      = 20;
-process    = process.compute_orientation_by_RT_correct(radiis, theta, imagename);
+% process = process.rear_filter;
 
-process.show_orientation_by_ID_RT(radiis, theta, imagename, angle_compens);
+%% eda rear_I 
+PropertyName = 'img_hil';
+zrange       = [490 530];
+process = process.search_rear_AS(PropertyName, zrange);
 
-[m_fiber_angle, std_fiber_angle, yhat, Idof_N] = process.calculate_m_std_fiber_angle_RT(radiis, theta, imagename, angle_compens);
+%% cluster algorithm
+% K = 30;
+% P = 2;
+% nbins = 100;
+% process = process.knn_search_rear_I(K, P, nbins);
+
+%% correct rear surface by instantaneous phase
+% 
+% process = process.correct_rear_I_byinph;
+% process.show_surfaces(filename_fig(1:end-5));
+
+%% internal damage features
+process.damage_imaging;
+
+%% angular distribution analysis
+clc;
+PropertyName = 'img_hil';
+zrange       = 1:1:650;
+process = process.angulardistribution_2dfft(zrange, PropertyName);
+
+%% 3d ply track
+% 0.676 us - 2.13 us
+% %  
+% process = process.Filter_logGabor(f0, sigma, 'img');
+% nol      = 49;
+% % process3 = process3.track_interply_2ndharmonic('img_hil_filter', nol);
+% process = process.track_interply('img_hil_filter');
+
+% use 2nd-harmonic for first and the last interplies, 
+% use fundamental resonance for another interplies
+
+f0_1     = 12.8e6;
+sigma0_1 = 0.8;
+f0_2     = 6.3e6;
+sigma0_2 = 0.7;
+nol      = 26; % make it 25+1 in case that there is redundant accidently-tracked interply
+process = process.track_interply_hybrid( ...
+    'img', f0_1, sigma0_1, f0_2, sigma0_2, nol);
 
 
 %%
-% 2d log-Gabor fitler
-wavelength  = 16:8:80;
-% orientation = 1:1:180;
-orientation = [1:23 68:180];
-SFB         = 1; % [0.5 2.5]
-SAR         = 0.5; % [0.23 0.92]
-% imagename = 'C_scan_inam_denoise';
-% process3  = process3.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
-% process3.show_orientation_by_ID_allwl(wavelength, orientation, K);
+B_type     = 'x';
+index      = 140;
+Bwin       = 1:350;
+TOF_oneply = TOF_walls / 24; % 24 plies
+process.show_B_scan_interply(B_type, index, Bwin, 'img_hil');
 
-tic;
-PropertyName  = 'img_hil';
-process    = process.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
-toc;
+%% structrul tensor 
+% out-of-plane angles
+f0    = 6.3e6;
+sigma = 0.7;
+process = process.Filter_logGabor(f0, sigma, 'img');
 
-% K: controls how much smoothing is applied to the Gabor magnitude responses.
-tic;
-K = 2e0;
-process.show_orientation_by_ID_allwl(wavelength, orientation, K, imagename, angle_compens);
-toc;
+% smoothing scale
+ds_rate      = 1;
+sigma1       = [3, 3, 3];
+% integration scale
+sigma2       = [3, 3, 3];
+PropertyName = 'img_hil_filter';
+process      = process.structural_tensor(sigma1, sigma2, PropertyName, ds_rate);
+
+% display the angles 3d slices
+medf_kernel  = [3, 3, 3];
+xslice       = 220 / process.fx * 1e3;
+yslice       = 170 / process.fy * 1e3;
+zslice       = [];
+process.show_angles_ST_zangle(medf_kernel, xslice, yslice, zslice, ds_rate);
+
+%
+B_type     = 'x';
+index      = 160;
+Bwin       = 1:350;
+process.show_angles_ST_Bscan(B_type, index, Bwin);
+
+%
+B_type     = 'y';
+index      = 170;
+Bwin       = 1:350;
+process.show_angles_ST_Bscan(B_type, index, Bwin);
 
 %% 
-% monogenic signal
-cw = 100;
-tic;
-process = process.compute_orientation_monogenicsignal(imagename, cw);
-toc;
+temp = process.c_p;
+s = orthosliceViewer(temp, 'Colormap', jet, 'DisplayRange', [0.95 1]...
+    , 'ScaleFactors', [1 1 0.5]);
 
-%% 'distance to front and rear' in-plane orientation extraction
-% RT
-% % PropertyName  = 'img_hil';
+temp_2D = sum(temp, 3);
+figure, imagesc(temp_2D);
 
-radius = 20;
-theta  = 1:1:180; % degree
-z      = 1:5:650;      
-tic;
-process       = process.extract_local_orientation_RT_3D_zaxis(...
-    PropertyName, radius, theta, z);
-toc;
+%% movie show
 
-% show slice
-xslice        = 100 / process.fx * 1e3;
-yslice        = 100 / process.fy * 1e3;
-zslice        = []; % us
-angle_compens = 0;
-process.show_inplane_direction_3D(xslice, yslice, zslice, angle_compens);
-
-%%
-% 2D log-Gabor filter
-wavelength  = 8:4:40;
-% orientation = 1:1:180;
-orientation = [1:23 68:180];
-z           = 1:5:650;  
-K           = 2e0;
-% sigma              = 5e-4;
-sigma       = 0;
-tic;
-process     = process.extract_local_orientation_3D_zaxis_allwl(...
-    PropertyName, wavelength, orientation, z, K);
-toc;
-
-% show slice
-xslice        = 100 / process.fx * 1e3;
-yslice        = 100 / process.fy * 1e3;
-zslice        = [];
-mfsize        = [3 3 3];
-angle_compens = 0;
-process.show_inplane_direction_3D_ID(xslice, yslice, zslice, mfsize, angle_compens);
-
-%% ************** calculate the mean fiber angle and its standard deviation *************
-% need the reference angle to calcualate the mean and std!
-
-Stacking_sequence = [
-    45 0 -45 -90 ...
-    45 0 -45 -90 ...
-    45 0 -45 -90 ...
-    -90 -45 0 45 ...
-    -90 -45 0 45 ...
-    -90 -45 0 45
-    ];
-m_fiber_angle_arr   = NaN(1, 24);
-std_fiber_angle_arr = NaN(1, 24);
-Idof_N_arr          = NaN(24, 180);
-PropertyName_IFD    = 'Inplane_direction_3D_ID';
-for p = 1:24 % 24 layers for default
-    if p ==24
-        ratio = (p-0.5) * 1/24;
-    else
-        ratio = (p-0.5) * 1/24;
-    end
-    ratio_next = (p-0.3) * 1/24;
-    %     ref_angle  = Stacking_sequence(p);
-    Idof_N_arr(p,:) = process3.calculate_angle_distrib(PropertyName, PropertyName_IFD, ratio, angle_compens);
-    %     std_fiber_angle_arr(p) = std_fiber_angle_arr(p) / sum(Idof_Nr_arr(p,:));
-    % normalize
-    %     Idof_N_arr(p,:) = (Idof_N_arr(p,:)) / sum(Idof_N_arr(p,:));
-    %     % log
-    %     Idof_N_arr(p,:) = log(Idof_N_arr(p,:));
-    disp([num2str(p) '/' '24']);
-    %     if p==3 || p==11 || p==22
-    if p==4 || p==5 || p==10 || p==15
-        figure('Name', ['angle_distribution_' num2str(p) '_' PropertyName_IFD]);
-        set(gcf, 'Position', [0, 0, 400, 250], 'color', 'white');
-        h1 = bar(-89-22:90-22, Idof_N_arr(p,:)/max(Idof_N_arr(p,:)));
-        hold on;
-        xlabel('\fontname {times new roman} Angle (\circ)', 'fontsize', 16);
-        ylabel('\fontname {times new roman} Normalized value', 'fontsize', 16);
-        %         ylabel('\fontname {times new roman} Percentage', 'fontsize', 16);
-        set(gca, 'Fontname', 'times new Roman', 'FontSize', 16);
-        set(gca, 'linewidth', 2);
-%         set(gca, 'YScale', 'log')
-        %         legend([h1 h2], 'Angle distribution', 'Multiple Gaussian fitting', 'Interply track');
-        %         ytickformat('percentage');
-    end
-end
-%
-maps             = cell(1,24);
-for i = 1:24
-    maps{i} = ['Ply' num2str(i) ':    ' num2str(Stacking_sequence(i)) '\circ'];
-end
-fx_creat_chartPlot(maps, Idof_N_arr, Stacking_sequence);
-
-% m_fiber_angle_arr = m_fiber_angle_arr-90-23+angle_compens;
-% 
-m_fiber_angle_arr_RT   = NaN(1, 24);
-std_fiber_angle_arr_RT = NaN(1, 24);
-Idof_N_arr             = NaN(24, 180);
-PropertyName_IFD       = 'Inplane_direction_3D_ID';
-angle_compens          = -7;
-for p = 1:24 % 24 layers for default
-    if p ==24
-        ratio = (p-0.5) * 1/24;
-    else
-        ratio = (p-0.5) * 1/24;
-    end
-    ratio_next = (p-0.3) * 1/24;
-    ref_angle  = Stacking_sequence(p);
-    [m_fiber_angle_arr_RT(p), std_fiber_angle_arr_RT(p), yhat, Idof_N_arr(p,:)] = process3.calculate_m_std_fiber_angle( ...
-            PropertyName, PropertyName_IFD, ratio, ratio_next, angle_compens);
-    %     std_fiber_angle_arr_RT(p) = std_fiber_angle_arr_RT(p) / sum(Idof_N_arr(p,:));
-    Idof_N_arr(p,:) = process3.calculate_angle_distrib(PropertyName, PropertyName_IFD, ratio, angle_compens);
-    %
-    %     % normalize
-%     Idof_N_arr(p,:) = (Idof_N_arr(p,:)) / sum(Idof_N_arr(p,:));
-%     % log
-%     Idof_N_arr(p,:) = log(Idof_N_arr(p,:));
-    disp([num2str(p) '/' '24']);
-    if p==3 || p==11 || p==22
-        figure('Name', ['angle_distribution_' num2str(p) '_' PropertyName_IFD]);
-        set(gcf, 'Position', [0, 0, 400, 250], 'color', 'white');
-        h1 = bar(-89-22:90-22, Idof_N_arr(p,:)/max(Idof_N_arr(p,:)));
-        xlabel('\fontname {times new roman} Angle (\circ)', 'fontsize', 16);
-        ylabel('\fontname {times new roman} Normalized value', 'fontsize', 16);
-        %         ylabel('\fontname {times new roman} Percentage', 'fontsize', 16);
-        set(gca, 'Fontname', 'times new Roman', 'FontSize', 16);
-        set(gca, 'linewidth', 2);
-%         set(gca, 'YScale', 'log')
-        %         legend([h1 h2], 'Angle distribution', 'Multiple Gaussian fitting', 'Interply track');
-        %         ytickformat('percentage');
-    end
-end
-fx_creat_chartPlot(maps, Idof_N_arr, Stacking_sequence);
-
-% m_fiber_angle_arr_RT = m_fiber_angle_arr_RT-90-23 + angle_compens;
-% 
-% T = array2table([m_fiber_angle_arr; m_fiber_angle_arr_RT; ...
-%     std_fiber_angle_arr; std_fiber_angle_arr_RT]);
-% writetable(T,'test.xlsx','Sheet',1);
 
 %% ***********
 FolderName = "F:\Xiayang\results\image_processing\";   % the destination folder

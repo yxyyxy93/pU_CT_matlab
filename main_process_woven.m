@@ -1,7 +1,4 @@
 % read the file
-% used to estimate thickness as well
-% This is used for the test the orignal phase-derived interply track and the log-gabor fitelr
-% for 1st paper parametric study
 
 clc;
 close all;
@@ -29,59 +26,243 @@ process3.fy = 1 / 0.2e-3; % unit: 1 / m
 process3               = process3.read_origin_data; % read (reset) the dataset
 
 %% ***********
-FolderName = "F:\Xiayang\results\Woven_samples\";   % the destination folder
+FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Woven_samples\";   % the destination folder
 save(strcat(FolderName, Filename1(1:end-4), 'mat'), '-v7.3');
 
-load(strcat(FolderName, '20220207_BP1_3_025m_V313_25db_PEmat.mat'));
-% '01032021_12h31m02s.mat'
+load(strcat(FolderName, '20220303_BP1_3_025m_h5m_10db_PEmat.mat'));
+% '20220207_BP1_3_025m_V313_25db_PEmat.mat'
 % '01032021_14h17m04s.mat'
 % '01032021_15h41m01s.mat'
 
 %% EDA
+% orthosliceViewer(process3.img);
+
 process3.show_img_shape;
 % cut the img, otherwise it could be out of the memory
 % window = [101 180 81 160 1 1500]; 
-% window = [1 120 151 300 1 1500]; 
-window   = [1 400 1 400 200 1200];  
+% window   = [200 350 270 420 300 1300]; 
+window   = [1 100 1 100 200 1200];  
 x_step   = 1;
 y_step   = 1;
 process3 = process3.cut_edges(window, x_step, y_step);
 process3.show_img_shape;
-% 3D viewer
-volumeViewer(abs(process3.img_hil));
+% % 3D viewer
+% volumeViewer(abs(process3.img_hil));
 
 %% show A scan
 % define the index to select Ascan 
-x           = 45;
-y           = 45;
-process3.demo_AS_3D_inclinfq(x, y);
+x   = 135;
+y   = 235;
+% process3.demo_AS_3D_inclinfq(x, y);
+
+process3.show_hilbert_Ascan(x, y);
 
 %% show C scan
 % define the index to select Ascan 
-z            = 400;
+close all;
+for z = 50:50:400
+    % z            = ;
+    PropertyName = 'img';
+%     process = process.show_Cscan(z, PropertyName);
+    process3.check2dfft_inclphase(z, PropertyName); % 2d spectrum
+end
+
+%% surface search
+global min_pks 
+min_pks      = 0.5;
 PropertyName = 'img_hil';
-process3.show_Cscan(z, PropertyName);
-
-%%
-
-process3.img_hil_filter = LA;
-PropertyName = 'img_hil_filter';
 % process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
+clc;
+% close all;
 
 MinPD   = 25;
 MinPH   = 0.015;  % these 2 parameters need to be changed for surface estimation.
 % surface calculation
-max_len = 1300;
-alpha   = 4e-3;
+max_len = 1250;
+alpha   = 3e-3;
 A_ratio = 0.5;
 
-process3.find_front_amp_alpha_Ascan(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio, 40, 150);
+process3.find_front_amp_alpha_Ascan(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio, 120, 120);
 
+%%
 % A_ratio      = 0.4; % for 0.3 m drop
 process3     = process3.find_front_amp_alpha(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio);
 filename_fig = filename;
+close all;
 process3.show_surfaces(filename_fig(1:end-5));
 
+%% check 2 times fft
+temp = process3.img;
+temp = temp(19, 15, :);
+temp = squeeze(temp);
+
+figure, subplot(3, 1, 1);
+plot(temp);
+subplot(3, 1, 2);
+temp_fft = fft(temp, 2^14);
+plot(abs(temp_fft));
+subplot(3, 1, 3);
+temp_fft2 = fft(abs(temp_fft));
+plot(abs(temp_fft2(1:end/2)));
+
+process3 = process3.find_surface_2fft(MinPD, MinPH, PropertyName, max_len);
+
+%% internal damage features
+process3.damage_imaging;
+
+%% fingerprint one ply - sino surface fitting
+% z        = 200;
+% z_range  = 100:10:1000;
+z_range  = 5/20:5/20:5/20;
+best_object_3D   = nan(length(z_range), 1); 
+best_location_3D = nan(length(z_range), 2); 
+for z_index = 1:length(z_range)
+    z = z_range(z_index);
+    [best_object_z, best_location_z] = process3.fingerprint_oneply(z, 'img_hil');
+    best_object_3D(z_index)      = best_object_z;
+    best_location_3D(z_index, :) = best_location_z;
+    clc;
+    disp(['Procedure: ', num2str(100*z_index/length(z_range)), '%']);
+end
+
+%% make fingerprint along z depth
+ratios       = 0/20:0.1/20:20/20;
+PropertyName = 'img_hil';
+% process3     = process3.fingerprint_2dfft_fitsurface(ratios, PropertyName);
+process3     = process3.fingerprint_2dfft_fitsurface_v2(ratios, PropertyName);
+
+%%
+temp = process3.fft2d_mask_fingerprint;
+
+temp_abs = squeeze(temp(:,:,:,1));
+% fill nan  
+temp_abs(isnan(temp_abs)) = min(temp_abs(:));
+orthosliceViewer(temp_abs, 'ScaleFactors', [1 1 1], 'Colormap', jet);
+
+temp_abs = squeeze(temp(:,:,:,2));
+% fill nan  
+temp_abs(isnan(temp_abs)) = min(temp_abs(:));
+orthosliceViewer(temp_abs, 'ScaleFactors', [1 1 1], 'Colormap', jet);
+
+
+%process3.fft2d_abs_fingerprint;
+close all;
+figure, subplot(2, 2, 1);
+imagesc(squeeze(sum(temp_abs, 3, 'omitnan')));
+subplot(2, 2, 2);
+imagesc(squeeze(sum(temp_abs, 1, 'omitnan')));
+subplot(2, 2, 3);
+temp_yz = squeeze(sum(temp_abs, 2, 'omitnan'));
+imagesc(temp_yz.');
+
+temp_pha = temp(:,:,:,2);
+% process3.fft2d_pha_fingerprint;
+figure, subplot(2, 2, 1);
+imagesc(squeeze(sum(temp_pha, 3, 'omitnan')));
+subplot(2, 2, 2);
+imagesc(squeeze(sum(temp_pha, 1, 'omitnan')));
+subplot(2, 2, 3);
+temp_yz = squeeze(sum(temp_pha, 2, 'omitnan'));
+imagesc(temp_yz.');
+
+% imagesc(temp(:,:, 50));
+
+%%
+% out-of-plane angles
+f0    = 6.3e6;
+sigma = 0.6;
+process3 = process3.Filter_logGabor(f0, sigma, 'img');
+
+% smoothing scale
+ds_rate      = 1;
+sigma1       = [3, 3, 3];
+% integration scale
+sigma2       = [3, 3, 3];
+PropertyName = 'img_hil_filter';
+process3     = process3.structural_tensor(sigma1, sigma2, PropertyName, ds_rate);
+
+% display the angles 3d slices
+medf_kernel  = [3, 3, 3];
+xslice       = 100 / process3.fx * 1e3;
+yslice       = 100 / process3.fy * 1e3;
+zslice       = [];
+process3.show_angles_ST_zangle(medf_kernel, xslice, yslice, zslice, ds_rate);
+
+%
+B_type     = 'x';
+index      = 100;
+Bwin       = 1:150;
+process3.show_angles_ST_Bscan(B_type, index, Bwin);
+
+%
+B_type     = 'y';
+index      = 100;
+Bwin       = 1:150;
+process3.show_angles_ST_Bscan(B_type, index, Bwin);
+
+temp = real(process3.angle_x);
+temp(isnan(temp)) = 0;
+temp              = temp / pi * 180;
+orthosliceViewer(temp, 'ScaleFactors', [1 1 0.2], 'colormap', jet, 'DisplayRange', [-2 2]);
+
+%% 3d ply track
+
+% % log-Gabor filter
+% f0        = 6.3e6;
+% sigma     = 0.1;
+% process3  = process3.Filter_logGabor(f0, sigma, 'img_hil');
+
+% % low-pass filter
+bandpassFreq = 10e6;
+process3     = process3.Filter_lowpass(bandpassFreq, 'img_hil');
+
+threshold    = 0.01;
+% process   = process.track_interply('img_hil_filter');
+process3  = process3.track_interply_inph(threshold, 'img_hil_filter', 21);
+
+
+%%
+TOF_walls    = -mean(process3.front_I - process3.rear_I, 'all', 'omitnan');
+
+
+close all;
+B_type     = 'x';
+index      = 20;
+Bwin       = 1:151;
+TOF_oneply = TOF_walls / 20; % 24 plies
+process3.show_B_scan_interply(B_type, index, Bwin, 'img_hil_filter');
+
+
+% process.show_track_interply(xslice, yslice, zslice);
+win_x = 1:151;
+win_y = 1:151;
+process3.show_oneinterply(05, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+process3.show_oneinterply(10, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+process3.show_oneinterply(15, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+
+%% knn
+process3.show_interply_track_3D;
+
+
+%% apply 2d fft filter
+close all;
+
+PropertyName = 'img_hil';
+% filtertype   = {'BP', 'Butterworth'};
+filtertype   = {'norchBP', 'Butterworth'};
+slicetype    = 'surface parallel';
+z            = 5/20;
+process3.apply2dfft_filter(z, PropertyName, filtertype, slicetype)
+
+%% amplitude rise method to determine the woven structure - spatial filter
+clc;
+close all;
+PropertyName = 'img_hil';
+zrange       = [450 500];
+drop         = 0.1; % dB
+sigma        = 1;
+
+process3 = process3.amplitude_rise_oneimage_spatialfilter(PropertyName, zrange, drop, sigma);
 
 %% 2d slice and 2d fft
 % 
@@ -98,8 +279,8 @@ PropertyName = 'img_hil';
 %     ]; % for 20220207_BP1_3_025m_V313_25db_PE
 
 roi = [
-    85, 146; % x
-    50, 300; % y
+    1, 150; % x
+    1, 150; % y
     ]; % for 20220207_BP1_3_025m_V320_25db_PE
 
 % 2d fft filter
@@ -136,6 +317,20 @@ F_type = 'Butterworth';
 process3.apply2dfft_bandreject(z, PropertyName, D_0, W, n, F_type, roi);
 F_type = 'Gaussian';
 process3.apply2dfft_bandreject(z, PropertyName, D_0, W, n, F_type, roi);
+
+%% 
+% band pass
+close all;
+D_0    = 25;
+W      = 10;
+n      = 2;
+F_type = 'ideal';
+process3.apply2dfft_bandpass(z, PropertyName, D_0, W, n, F_type, roi);
+F_type = 'Butterworth';
+process3.apply2dfft_bandpass(z, PropertyName, D_0, W, n, F_type, roi);
+F_type = 'Gaussian';
+process3.apply2dfft_bandpass(z, PropertyName, D_0, W, n, F_type, roi);
+
 
 %%
 % notch filter
@@ -176,7 +371,7 @@ size_patches = 128;
 step_patches =round(size_patches/2); % translation between patches (in pixels)
 [rows, cols] = size(im);
 P = numel(1:step_patches:(rows-size_patches))*numel(1:step_patches:(cols-size_patches));  % total number of patches
-disp(' ')
+disp(' ');
 %
 H           = hanning(size_patches)*hanning(size_patches)';  % patches are weighted by a Hann window to remove border effects
 % H = 
@@ -369,8 +564,8 @@ title('Local Orientation Over Scales (radians)');
 %% ***************** 3D analysis below *************************** %
 % Bscan origin
 B_type = 'y';
-index = 150;
-Bwin  = 1:400;
+index = 100;
+Bwin  = 1:150;
 PropertyName = 'img_hil';
 process3.demo_Bscan_inst(B_type, index, Bwin, PropertyName);
 
@@ -482,42 +677,6 @@ hold on;
 volumeViewer(abs(process3.img_3dfft));
 sliceViewer(abs(process3.img_3dfft));
 
-%% surface calculation
-% x: x index
-% y: y index
-% MinPD: MinPeakDistance for findpeaks
-% MinPH: MinPeakHeight for findpeaks
-MinPD        = 25;
-MinPH        = 0.03;  % these 2 parameters need to be changed for surface estimation.
-PropertyName = 'img_hil';
-x = 22;
-y = 22;
-process3.show_Ascan_inam_peaks(x, y, MinPD, MinPH, PropertyName); % x, y
-
-alpha   = 4e-3;
-A_ratio = 0.8;
-max_len = 1000;
-x       = 30;
-y       = 290;
-% A_ratio      = 0.4; % for 0.3 m drop
-process3.find_front_amp_alpha_Ascan(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio, x, y)
-        
-process3     = process3.find_front_amp_alpha(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio);
-filename_fig = filename;
-process3.show_surfaces(filename_fig(1:end-5));
-
-process3     = process3.recover_surface;
-process3     = process3.smooth_rear_I;
-process3.show_surfaces(filename_fig(1:end-5));
-
-TOF_walls    = -mean(process3.front_I-process3.rear_I, 'all', 'omitnan')/process3.fs;
-disp(TOF_walls);
-% %
-% process      = process.smooth_rear_I;
-% process.show_surfaces(filename_fig(1:end-4));
-% %
-% process      = process.recover_surface;
-
 %% original results display
 xslice = 50 / process3.fx * 1e3;
 yslice = 50 / process3.fy * 1e3;
@@ -553,7 +712,7 @@ PropertyName = 'img_hil';
 [process3, C_scan_inam_temp, C_scan_index_temp] = process3.define_parallel_inamCscan(ratio, PropertyName);
 imagesc(C_scan_index_temp);
 
-%% save all figures"z
+%% save all figures
 % "F:\Xiayang\results\Woven_samples\01032021_12h31m02s\f_5_omega07"
 % "F:\Xiayang\results\Woven_samples\01032021_12h31m02s\f_10_omega07"
 FolderName = "F:\Xiayang\results\Woven_samples\01032021_12h31m02s\f_10_omega07";   % the destination folder

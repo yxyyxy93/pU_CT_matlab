@@ -84,7 +84,6 @@ zslice = 0 / process3.fs * 1e3 * 3000/2;
             
 process3.show_inaminph_3D(xslice, yslice, zslice);
 
-
 %% show C scan
 % define the index to select Ascan 
 z            = 500;

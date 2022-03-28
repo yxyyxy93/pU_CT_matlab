@@ -3,6 +3,10 @@ classdef class_process_woven_RFdata < class_process_RFdata
     properties
         img_3dfft
         img_fftfilter
+        % fringerprint of woven sample
+        fft2d_abs_fingerprint
+        fft2d_pha_fingerprint
+        fft2d_mask_fingerprint
     end
     
     methods
@@ -137,7 +141,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             obj.(PropertyName) = img_temp;
             obj.img_hil = img_hilbert;
         end
-
+        
         %************************* B_scan analysis *************************
         function demo_Bscan_inst(obj, B_type, index, Bwin, PropertyName)
             % demonstrate the B_scan of the img
@@ -296,7 +300,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             end
             % apply hilbert
             for i = 1:size(B_scan, 1)
-                B_scan(i, :) = hilbert(B_scan(i, :));                
+                B_scan(i, :) = hilbert(B_scan(i, :));
             end
             %             %remove the direct component
             %             B_scan = B_scan - mean(B_scan, 2);
@@ -411,7 +415,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             axis image;
         end
         
-        function apply2dfft_LPandHPfilter(obj, z, PropertyName,R_lo_H, R_Lo, roi)
+        function apply2dfft_LPandHPfilter(obj, z, PropertyName, R_lo_H, R_Lo, roi)
             % apply 2d fft filter (LP & HP) to the C scan by z index.
             % depth.
             % z: z index. unit: data points
@@ -423,9 +427,9 @@ classdef class_process_woven_RFdata < class_process_RFdata
             % ***
             % fillna
             C_scan_inam = abs(obj.(PropertyName)(:, :, z));
-            C_scan_inam(isnan(C_scan_inam)) = mean(C_scan_inam, 'all', 'omitnan'); 
+            C_scan_inam(isnan(C_scan_inam)) = mean(C_scan_inam, 'all', 'omitnan');
             [m, n] = size(C_scan_inam);
-            % display snr 
+            % display snr
             disp('snr and cnr image_origin:')
             [snr, cnr] = fx_image_snr_2(C_scan_inam, roi);
             disp([snr cnr]);
@@ -460,7 +464,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
             set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
-            set(gca, 'linewidth', 2); 
+            set(gca, 'linewidth', 2);
             ax     = subplot(2, 1, 1);
             imagesc(obj.fx*X/nfftx, obj.fy*Y/nffty, 20*log10(abs(fft2D_shifted)/nfftx/nffty)); % divide by the x and y length: nfftx and nffty
             axis image;
@@ -502,33 +506,33 @@ classdef class_process_woven_RFdata < class_process_RFdata
             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
             set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
             set(ax, 'linewidth', 2);
-%             imagesc(X, Y, Lo);
-%             colorbar;
-%             figure('Name', ['2dFreqSpectrum' , '_', num2str(z)]);
-%             imagesc(obj.fx*(-nfftx/2+1: nfftx/2)/nfftx, obj.fy*(-nffty/2+1:nffty/2)/nffty, 20*log10(abs(fft2D_shifted)/nfftx/nffty)); % divide by the x and y length: nfftx and nffty
-%             h = colorbar; colormap(jet);
-%             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (dB)');
-%             xlabel('\fontname {times new roman} X wavenumber (1/m) ', 'fontsize', 16);
-%             ylabel('\fontname {times new roman} Y wavenumber (1/m)', 'fontsize', 16);
-%             set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
-%             set(gca, 'linewidth', 2);
-%             %2d fft and filtering
-%             %             fft2D_shifted_filter = fft2D_shifted .* Hi .* Lo;
-%             fft2D_shifted_filter = fft2D_shifted .* Lo;
-%             %             fft2D_shifted_filter = fft2D_shifted;
-%             fft2D_ishift         = ifftshift(fft2D_shifted_filter);
-%             C_scan_inam_2DFFT    = ifft2(fft2D_ishift);
-%             % plot 2d fft filtered
-%             figure('Name', ['C_scan_amp_2dfftFiltered' , '_', num2str(z)]);
-%             imagesc(Yd, Xd, C_scan_inam_2DFFT(1: m, 1:n));
-%             axis image;
-%             hold on;
-%             h = colorbar; colormap(jet);
-%             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
-%             xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
-%             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
-%             set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
-%             set(gca, 'linewidth', 2);
+            %             imagesc(X, Y, Lo);
+            %             colorbar;
+            %             figure('Name', ['2dFreqSpectrum' , '_', num2str(z)]);
+            %             imagesc(obj.fx*(-nfftx/2+1: nfftx/2)/nfftx, obj.fy*(-nffty/2+1:nffty/2)/nffty, 20*log10(abs(fft2D_shifted)/nfftx/nffty)); % divide by the x and y length: nfftx and nffty
+            %             h = colorbar; colormap(jet);
+            %             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (dB)');
+            %             xlabel('\fontname {times new roman} X wavenumber (1/m) ', 'fontsize', 16);
+            %             ylabel('\fontname {times new roman} Y wavenumber (1/m)', 'fontsize', 16);
+            %             set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            %             set(gca, 'linewidth', 2);
+            %             %2d fft and filtering
+            %             %             fft2D_shifted_filter = fft2D_shifted .* Hi .* Lo;
+            %             fft2D_shifted_filter = fft2D_shifted .* Lo;
+            %             %             fft2D_shifted_filter = fft2D_shifted;
+            %             fft2D_ishift         = ifftshift(fft2D_shifted_filter);
+            %             C_scan_inam_2DFFT    = ifft2(fft2D_ishift);
+            %             % plot 2d fft filtered
+            %             figure('Name', ['C_scan_amp_2dfftFiltered' , '_', num2str(z)]);
+            %             imagesc(Yd, Xd, C_scan_inam_2DFFT(1: m, 1:n));
+            %             axis image;
+            %             hold on;
+            %             h = colorbar; colormap(jet);
+            %             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            %             xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            %             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            %             set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            %             set(gca, 'linewidth', 2);
             % display snr
             disp('LPfilter snr and cnr image_filter:');
             [snr, cnr] = fx_image_snr_2(C_scan_inam_2DFFT(1: m, 1:n), roi);
@@ -652,7 +656,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             nffty         = max(nfftx, nffty);
             %
             fft2D         = fft2(C_scan_inam, nfftx, nffty);
-            fft2D_shifted = fftshift(fft2D);          
+            fft2D_shifted = fftshift(fft2D);
             % Gaussian Filter Response Calculation
             X              = -nfftx/2+1: nfftx/2;
             Y              = -nffty/2+1:nffty/2;
@@ -719,7 +723,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             [snr, cnr] = fx_image_snr_2(C_scan_inam_2DFFT(1: m, 1:n), roi);
             disp([snr cnr]);
         end
-         
+        
         function apply2dfft_bandreject(obj, z, PropertyName, D_0, W, n_bwf, F_type, roi)
             % apply 2d fft filter (bandreject) to the C scan by z index.
             % depth.
@@ -734,7 +738,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             % ***
             % fillna
             C_scan_inam = abs(obj.(PropertyName)(:, :, z));
-            C_scan_inam(isnan(C_scan_inam)) = mean(C_scan_inam, 'all', 'omitnan');            
+            C_scan_inam(isnan(C_scan_inam)) = mean(C_scan_inam, 'all', 'omitnan');
             [m, n] = size(C_scan_inam);
             Xd     = (1: m) / obj.fx * 1e3;
             Yd     = (1: n) / obj.fy * 1e3;
@@ -755,8 +759,8 @@ classdef class_process_woven_RFdata < class_process_RFdata
             fft2D_shifted = fftshift(fft2D);
             X              = -nfftx/2+1: nfftx/2;
             Y              = -nffty/2+1:nffty/2;
-            [Xmesh, Ymesh] = meshgrid(Y, X);     
-            % design the filter 
+            [Xmesh, Ymesh] = meshgrid(Y, X);
+            % design the filter
             D              = sqrt(Xmesh.^2 + Ymesh.^2);
             switch F_type
                 case char('ideal')
@@ -768,6 +772,90 @@ classdef class_process_woven_RFdata < class_process_RFdata
                 case char('Gaussian')
                     % Gaussian bandreject filter
                     filter         = 1 - exp(-1/2 * ((D.^2-D_0^2)./D./W).^2);
+            end
+            %
+            cf = figure('Name', ['C_scan_amp_2dfftFiltered', '_', F_type, '_', num2str(z)]);
+            set(cf, 'Position', [0, 0, 600, 800], 'color', 'white');
+            ax     = subplot(2, 1, 1);
+            imagesc(obj.fx*X/nfftx, obj.fy*Y/nffty, 20*log10(abs(fft2D_shifted)/nfftx/nffty),  'AlphaData', filter); % divide by the x and y length: nfftx and nffty
+            axis image;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (dB)');
+            xlabel('\fontname {times new roman} X wavenumber (1/m) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y wavenumber (1/m)', 'fontsize', 16);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+            %2d fft and filtering
+            %             fft2D_shifted_filter = fft2D_shifted .* Hi .* Lo;
+            fft2D_shifted_filter = fft2D_shifted .* filter;
+            %             fft2D_shifted_filter = fft2D_shifted;
+            fft2D_ishift         = ifftshift(fft2D_shifted_filter);
+            C_scan_inam_2DFFT    = real(ifft2(fft2D_ishift));
+            % plot 2d fft filtered
+            ax     = subplot(2, 1, 2);
+            imagesc(Yd, Xd, abs(C_scan_inam_2DFFT(1: m, 1:n)));
+            axis image;
+            hold on;
+            h = colorbar; colormap(jet);
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+            % display snr
+            disp([F_type 'snr and cnr image_filter:']);
+            [snr, cnr] = fx_image_snr_2(C_scan_inam_2DFFT(1: m, 1:n), roi);
+            disp([snr cnr]);
+        end
+        
+        function apply2dfft_bandpass(obj, z, PropertyName, D_0, W, n_bwf, F_type, roi)
+            % apply 2d fft filter (band pass) to the C scan by z index.
+            % depth.
+            % z: z index. unit: data points
+            % center: [j, i], the centers of the mask for Radon transform
+            % radii: the radii of of the mask for Radon transform
+            % W: width of the band
+            % D_0: radius of the circle-shaped band.
+            % n_bwf: order of the Butterworth bandreject filter
+            % F_type: choose the type of the filter: 'ideal', 'Butterworth', or 'Gaussian'
+            % roi: x and y index of ROI
+            % ***
+            % fillna
+            C_scan_inam = abs(obj.(PropertyName)(:, :, z));
+            C_scan_inam(isnan(C_scan_inam)) = mean(C_scan_inam, 'all', 'omitnan');
+            [m, n] = size(C_scan_inam);
+            Xd     = (1: m) / obj.fx * 1e3;
+            Yd     = (1: n) / obj.fy * 1e3;
+            % display snr
+            disp('*********************************************');
+            disp('snr and cnr image_origin:')
+            [snr, cnr] = fx_image_snr_2(C_scan_inam, roi);
+            disp([snr cnr]);
+            % ** band reject fitler in frequency domain
+            % now make 2D fft of original image
+            nfftx         = 2^nextpow2(m);
+            nffty         = 2^nextpow2(n);
+            % cannot solve the problem when nfftx!=nffty !
+            nfftx         = max(nfftx, nffty);
+            nffty         = max(nfftx, nffty);
+            %
+            fft2D         = fft2(C_scan_inam, nfftx, nffty);
+            fft2D_shifted = fftshift(fft2D);
+            X              = -nfftx/2+1: nfftx/2;
+            Y              = -nffty/2+1:nffty/2;
+            [Xmesh, Ymesh] = meshgrid(Y, X);
+            % design the filter
+            D              = sqrt(Xmesh.^2 + Ymesh.^2);
+            switch F_type
+                case char('ideal')
+                    filter         = ones(nfftx, nffty);
+                    filter(D>(D_0+W/2) | D<(D_0-W/2)) = 0;
+                case char('Butterworth')
+                    % Butterworth bandreject filter
+                    filter         = 1 - 1 ./ (1 + (D*W./(D.^2-D_0^2)).^(2*n_bwf));
+                case char('Gaussian')
+                    % Gaussian bandreject filter
+                    filter         = exp(-1/2 * ((D.^2-D_0^2)./D./W).^2);
             end
             %
             cf = figure('Name', ['C_scan_amp_2dfftFiltered', '_', F_type, '_', num2str(z)]);
@@ -817,7 +905,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             % ***
             % fillna
             C_scan_inam = abs(obj.(PropertyName)(:, :, z));
-            C_scan_inam(isnan(C_scan_inam)) = mean(C_scan_inam, 'all', 'omitnan');            
+            C_scan_inam(isnan(C_scan_inam)) = mean(C_scan_inam, 'all', 'omitnan');
             [m, n] = size(C_scan_inam);
             Xd     = (1: m) / obj.fx * 1e3;
             Yd     = (1: n) / obj.fy * 1e3;
@@ -839,7 +927,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             fft2D_shifted = fftshift(fft2D);
             X              = -nfftx/2+1: nfftx/2;
             Y              = -nffty/2+1:nffty/2;
-            [Xmesh, Ymesh] = meshgrid(Y, X);     
+            [Xmesh, Ymesh] = meshgrid(Y, X);
             % design the filter
             fft2D_shifted_filter = fft2D_shifted;
             for i = 1:length(Xv_0)
@@ -891,18 +979,650 @@ classdef class_process_woven_RFdata < class_process_RFdata
             disp([snr cnr]);
         end
         
+        function apply2dfft_filter(obj, z, PropertyName, filtertype, slicetype)
+            % apply 2d fft filter to the C scan by z index.
+            % z: z index. unit: data points
+            % filtertype: choose the type of the filter:
+            % filtertype 1: 'LP', 'HP', 'BP', 'BR', 'norch', 'norchBP'.
+            % filtertype 2: 'ideal', 'Butterworth', or 'Gaussian'
+            % slicetype: 'z depth', 'surface parallel', 'ply wise'
+            % ***
+            img = abs(obj.(PropertyName));
+            switch slicetype
+                case char('z depth')
+                    C_scan_inam = img(:, :, z);
+                case char('surface parallel')
+                    ratio = z;
+                    [~, C_scan_inam, ~] = obj.define_parallel_inamCscan(ratio, PropertyName);
+                case char('ply wise')
+                    layer        = z;
+                    inph_ex      = obj.mask_plytrack;
+                    [m, n, ~]    = size(img);
+                    C_scan_index = NaN(m, n);
+                    for i = 1: m
+                        for j = 1:n
+                            if round(obj.front_I(i, j))
+                                inph_ex(i, j, round(obj.front_I(i, j))) = 1;
+                            end
+                            % no back_surface or delamination
+                            if ~isnan(obj.rear_I(i, j))
+                                inph_ex(i, j, round(obj.rear_I(i, j))) = 1;
+                            end
+                            k = find(inph_ex(i, j, :), layer + 1);  % if the non-zero values are less that layer, return the real numbers of non-zero values
+                            % extract two inter-plies embedding the ply
+                            if length(k) > layer
+                                k1                 = k(layer);
+                                k2                 = k(layer + 1);
+                                % use the ratio to calculate the position in the ply
+                                z_index            = round(k1 + (k2 - k1) * ratio);
+                                C_scan_index(i, j) = z_index;
+                            else % set the last inter-ply as NaN otherwise
+                                C_scan_index(i, j) = NaN;
+                            end
+                        end
+                        
+                    end
+                    C_scan_inam = nan(m, n);
+                    for i = 1: m
+                        for j = 1:n
+                            if obj.rear_I(i, j) > C_scan_index(i, j) && img(i, j, C_scan_index(i, j)) % check the rear surface and assign NaN
+                                C_scan_inam(i, j) = inam(i, j, C_scan_index(i, j));
+                            else
+                                C_scan_inam(i, j) = NaN;
+                            end
+                        end
+                    end
+                otherwise % not correct
+                    fprint("slicetype shuold be 'z depth', 'surface parallel', or 'ply wise'. ");
+            end
+            % fillna
+            C_scan_inam(isnan(C_scan_inam)) = mean(C_scan_inam, 'all', 'omitnan');
+            [m, n] = size(C_scan_inam);
+            Xd     = (1: m) / obj.fx * 1e3;
+            Yd     = (1: n) / obj.fy * 1e3;
+            % plot original
+            % display snr
+            disp('*************************************************')
+            disp('snr and cnr image_origin:')
+            % now make 2D fft of original image
+            nfftx = 2^nextpow2(m);
+            nffty = 2^nextpow2(n);
+            nfftx = max(nfftx, nffty); % cannot tackle the issue of different nfftx and nffty.
+            nffty = max(nfftx, nffty);
+            %
+            fft2D         = fft2(C_scan_inam, nfftx, nffty);
+            fft2D_shifted = fftshift(fft2D);
+            % remove DC
+            fft2D_shifted(floor(end/2-4):floor(end/2+6), floor(end/2-4):floor(end/2+6)) = 0;
+            X             = -nfftx/2+1: nfftx/2;
+            Y             = -nffty/2+1:nffty/2;
+            cf = figure('Name', ['2Dspectrum', '_', slicetype, '_', num2str(z)]);
+            set(cf, 'Position', [0, 0, 600, 800], 'color', 'white');
+            ax     = subplot(1, 1, 1);
+            imagesc(X, Y, 20*log10(abs(fft2D_shifted)/m/n)); % divide by the x and y length: nfftx and nffty
+            axis image;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (dB)');
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+            %             % *** 2d fft filter
+            switch filtertype{1}
+                case char('LP')
+                    prompt = 'What is the radius of the LP filter? ';
+                    D_0 = input(prompt);
+                    amp_max_filter = fx_lowpass_2dfft(C_scan_inam, D_0, filtertype{2});
+                case char('BP')
+                    % Butterworth bandpass filter
+                    prompt = 'What is the radius of the BP filter? ';
+                    D_0 = input(prompt);
+                    prompt = 'What is the width of the BP filter? ';
+                    W = input(prompt);
+                    prompt = 'What is the order of the Butterworth filter? ';
+                    n_bwf = input(prompt);
+                    amp_max_filter = fx_bandpass_2dfft(C_scan_inam, D_0, W, filtertype{2}, n_bwf);
+                case char('norchBP')
+%                     %                     prompt = 'What is the BP points of the BP filter? ';
+%                     [B,ind]       = maxk(abs(fft2D_shifted(:)), 10);
+%                     [row,col]     = ind2sub(size(fft2D_shifted),ind);
+%                     imagesc(abs(fft2D_shifted));
+%                     hold on;
+%                     scatter(row, col, 15, 'ro');
+%                     hold on;
+%                     scatter(row, col, 15, 'ro');
+                    X_0 = [-31 22 0 22];
+                    Y_0 = [0 -22 31 22];
+                    prompt = 'What is the order of the Butterworth filter? ';
+                    n_bwf = input(prompt);
+                    prompt = 'What is the radius of the norchBP filter? ';
+                    D_0 = input(prompt);
+                    amp_max_filter = fx_norchBP_2dfft(C_scan_inam, X_0, Y_0, D_0, filtertype{2}, n_bwf);
+                case char('HP')
+                    
+                otherwise % no filter
+                    amp_max_filter = amp_max;
+            end
+            % plot 2d fft filtered
+            ax     = subplot(2, 1, 1);
+            imagesc(ax, Yd, Xd, C_scan_inam);
+            axis image;
+            colormap(ax, jet);
+            hold on;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+            ax     = subplot(2, 1, 2);
+            imagesc(Yd, Xd, abs(amp_max_filter(1: m, 1:n)));
+            axis image; colormap(jet);
+            hold on;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+        end
+        
+        % ******************** 2d fft **********************
+        
+        function check2dfft_inclphase(obj, z, PropertyName)
+            % apply 2d fft to the C scan by z index.
+            % depth.
+            % z: z index. unit: data points
+            % PropertyName: property to sue
+            % ***
+            % fillna
+            C_scan_inam = abs(obj.(PropertyName)(:, :, z));
+            C_scan_inam(isnan(C_scan_inam)) = mean(C_scan_inam, 'all', 'omitnan');
+            [m, n] = size(C_scan_inam);
+            %
+            % now make 2D fft of original image
+            nfftx         = 2^nextpow2(m);
+            nffty         = 2^nextpow2(n);
+            % cannot solve the problem when nfftx!=nffty !
+            nfftx         = max(nfftx, nffty);
+            nffty         = max(nfftx, nffty);
+            %
+            fft2D         = fft2(C_scan_inam, nfftx, nffty);
+            fft2D_shifted = fftshift(fft2D);
+            % Gaussian Filter Response Calculation
+            X              = -nfftx/2+1: nfftx/2;
+            Y              = -nffty/2+1:nffty/2;
+            % **** plot original
+            cf = figure('Name', ['C_scan_amp' , '_', num2str(z)]);
+            set(cf, 'Position', [0, 0, 1200, 400], 'color', 'white');
+            ax     = subplot(1, 3, 1);
+            Xd     = (1: m) / obj.fx * 1e3;
+            Yd     = (1: n) / obj.fy * 1e3;
+            imagesc(ax, Yd, Xd, abs(C_scan_inam));
+            axis image;
+            hold on;
+            h = colorbar; colormap(ax, jet);
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (dB)');
+            xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(gca, 'linewidth', 2);
+            ax     = subplot(1, 3, 2);
+            log_abs_2dfft                   =  20*log10(abs(fft2D_shifted)/nfftx/nffty);
+            log_abs_2dfft(end/2+1, end/2+1) = NaN; % remove DC;
+            imagesc(obj.fx*X/nfftx, obj.fy*Y/nffty, log_abs_2dfft); % divide by the x and y length: nfftx and nffty
+            %             imagesc(obj.fx*X/nfftx, obj.fy*Y/nffty, real(fft2D_shifted)/nfftx/nffty); % divide by the x and y length: nfftx and nffty
+            axis image;
+            h = colorbar; colormap(jet);
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (dB)');
+            xlabel('\fontname {times new roman} X wavenumber (1/m) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y wavenumber (1/m)', 'fontsize', 16);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+            ax     = subplot(1, 3, 3);
+            imagesc(obj.fx*X/nfftx, obj.fy*Y/nffty, angle(fft2D_shifted)); % divide by the x and y length: nfftx and nffty
+            % imagesc(obj.fx*X/nfftx, obj.fy*Y/nffty, imag(fft2D_shifted)/nfftx/nffty); % divide by the x and y length: nfftx and nffty
+            axis image;
+            h = colorbar; colormap(ax, gray);
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Phase (rad.)');
+            xlabel('\fontname {times new roman} X wavenumber (1/m) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y wavenumber (1/m)', 'fontsize', 16);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+        end
+        
+        % ******************** 2D image-wise analysis *******************
+        
+        function obj = amplitude_rise_oneimage_spatialfilter(obj, PropertyName, zrange, drop, sigma)
+            % determine thoverall size of image damagas
+            % PropertyName: the name of the property in the object
+            % zrange: the z axis range to find the max amplitudes
+            % drop: rise of amp in dB
+            % sigma: sigma for Gaussian filter
+            img_temp = obj.(PropertyName);
+            inam_ex  = abs(img_temp(:,:,zrange(1):zrange(2))); % select the range
+            % ****
+            inph_ex  = angle(img_temp);
+            infq_ex  = diff(unwrap(inph_ex, [], 3), 1, 3) /2 / pi * obj.fs;
+            inph_ex  = sum(inph_ex(:,:,zrange(1):zrange(2)), 3, 'omitnan'); % select the range
+            infq_ex  = sum(infq_ex(:,:,zrange(1):zrange(2)), 3, 'omitnan'); % select the range
+            amp_max  = sum(inam_ex, 3, 'omitnan');
+            %             inph_ex  = angle(obj.(PropertyName));
+            %            inph_temp = inph_ex(:,:,zrange(1):zrange(2)); % select the range
+            clear img_temp;
+            % Gaussian or median filter
+            %             inph_temp = imgaussfilt(inph_temp, sigma);
+            %             amp_max_filter = imgaussfilt(amp_max, sigma);
+            %             amp_max_filter = medfilt2(amp_max, [sigma sigma]);
+            
+            %　2d wavelet filter
+            amp_max = amp_max/max(amp_max, [], 'all')*127;
+            [thr,sorh,keepapp] = ddencmp('den','wv', amp_max);
+            amp_max_filter = wdencmp('gbl',amp_max,'sym4',2,thr,sorh,keepapp);
+            %             [amp_max_filter, ~, ~] = func_denoise_dw2d(amp_max/max(amp_max, [], 'all')*127);
+            % find the average peak amplitudes
+            amp_max_mean = mean(amp_max_filter, 'all', 'omitnan');
+            log_amp_max  = 20*log10(amp_max_filter);
+            groudtruth   = log_amp_max >= 20*log10(amp_max_mean) + drop;
+            % imopen
+            se = strel('disk', 5);
+            groudtruth = imopen(groudtruth, se);
+            % display
+            [m, n] = size(amp_max_filter);
+            Xd     = (1: m) / obj.fx * 1e3;
+            Yd     = (1: n) / obj.fy * 1e3;
+            cf = figure('Name', ['defect_amplitduedrop', '_', num2str(drop)]);
+            set(cf, 'Position', [0, 0, 600, 800], 'color', 'white');
+            ax     = subplot(2, 2, 1);
+            imagesc(ax, Yd, Xd, amp_max_filter);
+            axis image;
+            colormap(ax, jet);
+            hold on;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+            % inph
+            ax     = subplot(2, 2, 2);
+            imagesc(ax, Yd, Xd, inph_ex);
+            axis image;
+            colormap(ax, gray);
+            hold on;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Truth');
+            xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+            % infq
+            ax     = subplot(2, 2, 3);
+            imagesc(ax, Yd, Xd, infq_ex);
+            axis image;
+            colormap(ax, gray);
+            hold on;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Truth');
+            xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+            % ground truth
+            ax     = subplot(2, 2, 4);
+            imagesc(ax, Yd, Xd, groudtruth);
+            axis image;
+            colormap(ax, gray);
+            hold on;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Truth');
+            xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+            %             % edge detection
+            %             BW1 = edge(amp_max_filter, 'sobel');
+            
+        end
+        
+        function obj = amplitude_rise_3D_spatialfilter(obj, PropertyName, zrange, drop, sigma)
+            % determine thoverall size of image damagas
+            % PropertyName: the name of the property in the object
+            % zrange: the z axis range to find the max amplitudes
+            % drop: rise of amp in dB
+            % sigma: sigma for Gaussian filter
+            img_temp = abs(obj.(PropertyName));
+            %             inph_ex  = angle(obj.(PropertyName));
+            defect_groundtruth = boolean(zeros(size(img_temp)));
+            rear_I      = nan(size(img_temp, 1), size(img_temp, 2));
+            rear_I_temp = rear_I;
+            for z = zrange(1):zrange(2)
+                amp_max = img_temp(:,:,z);
+                % *** shadow effect
+                %                 amp_max(~isnan(rear_I)) = mean(amp_max, 'all', 'omitnan');
+                %                 amp_max(~isnan(rear_I)) = nan;
+                % *** *
+                %  Gaussian filter
+                amp_max_filter = imgaussfilt(amp_max, sigma);
+                %                 %　medfilt
+                %                 amp_max_filter = medfilt2(amp_max, [sigma sigma]);
+                %                 % meanfilter
+                %                 h = 1/9*ones(9,1);
+                %                 H = h*h';
+                %                 amp_max_filter = filter2(H,amp_max);
+                %                 %　2d wavelet filter
+                %                 amp_max = amp_max/max(amp_max, [], 'all')*127;
+                %                 [thr,sorh,keepapp] = ddencmp('den','wv', amp_max);
+                %                 amp_max_filter = wdencmp('gbl',amp_max,'sym4',2,thr,sorh,keepapp);
+                % find the average peak amplitudes
+                amp_max_mean = mean(amp_max_filter, 'all', 'omitnan');
+                log_amp_max  = 20*log10(amp_max_filter);
+                if drop >=0
+                    groundtruth   = log_amp_max >= 20*log10(amp_max_mean) + drop;
+                else
+                    groundtruth   = log_amp_max < 20*log10(amp_max_mean) + drop;
+                end
+                % imopen:　remove open gap
+                se = strel('disk', 5);
+                groundtruth = imopen(groundtruth, se);
+                % imclose：remove strutrural gap
+                groundtruth = imclose(groundtruth, se);
+                %
+                defect_groundtruth(:,:,z) = groundtruth;
+                %                 if sum(groudtruth, 'all')>0
+                rear_I_temp(groundtruth) = z;
+                rear_I(rear_I~=0) = min(rear_I(rear_I~=0), rear_I_temp(rear_I~=0), 'omitnan') ; % rear_I ~=0
+                rear_I(rear_I==0) = rear_I_temp(rear_I==0); % rear_I == 0
+                %                 end
+                clc;
+                fprintf('defect searching progress: %0.2f%%\n',100*z/(zrange(2)-zrange(1)));
+            end
+            obj.defect_gt = defect_groundtruth;
+            obj.rear_I = rear_I;
+        end
+        
+        % ******************** fingerprint of ply *********************
+        function obj = fingerprint_2dfft_fitsurface(obj, ratios, PropertyName)
+            % find 2dfft features along z depth,
+            % fitting the surface profiles
+            % start
+            [lxc, lyc, lzc] = size(obj.(PropertyName));
+            fft2d_abs       = NaN(lxc, lyc, lzc);
+            fft2d_pha       = NaN(lxc, lyc, lzc);
+            fft2d_mask      = NaN(lxc, lyc, lzc, 2);
+            index_container = NaN(lxc, lyc);
+            % incl. location, phase, amplitude ...
+            phase_info = nan(length(ratios), 5);
+            row = [70;82;63;89;94;58;63;89;76;76];
+            col = [89;63;63;89;76;76;81;71;57;95];
+            ind = sub2ind(size(fft2d_pha), row, col); % convert to linear index
+            for i = 1:length(ratios)
+                ratio = ratios(i);
+                %                 ratio = ratios(max(1, i-3): min(i+3, end)); % the ratio to determine the index
+                if i~=length(ratios)
+                    ratio_next = ratios(i+1);
+                end
+                index_container_prev = index_container;
+                [~, C_scan_inam_para, index_container] = obj.define_parallel_inamCscan(ratio, PropertyName);
+                [~, ~, index_container_next]           = obj.define_parallel_inamCscan(ratio_next, PropertyName);
+                % no filter
+                C_scan_inam_para_denoise = C_scan_inam_para;
+                % 2d fft
+                % now make 2D fft of original image
+                %                 nfftx         = 2^nextpow2(lxc);
+                %                 nffty         = 2^nextpow2(lyc);
+                %
+                fft2D         = fft2(C_scan_inam_para_denoise, lxc, lyc);
+                fft2D_shifted = fftshift(fft2D);
+                % normalize
+                fft2D_shifted(floor(end/2+1), floor(end/2+1)) = nan;
+                fft2D_shifted = fft2D_shifted/max(abs(fft2D_shifted), [], 'all', 'omitnan');
+                %
+                if i==1
+                    upper_index_bound = index_container;
+                    lower_index_bound = round(index_container/2 ...
+                        +index_container_next/2);
+                elseif i==length(ratios)
+                    upper_index_bound = round(index_container/2 ...
+                        + index_container_prev/2);
+                    lower_index_bound = index_container;
+                else
+                    upper_index_bound = round(index_container/2 ...
+                        + index_container_prev/2);
+                    lower_index_bound = round(index_container/2 ...
+                        +index_container_next/2);
+                end
+                % mask
+                fft2d_abs_oneplane = 20*log10(abs(fft2D_shifted));
+                fft2d_pha_oneplane = angle(fft2D_shifted);
+                %
+                mask = fft2d_abs_oneplane<mean(fft2d_abs_oneplane(:), 'omitnan')+6;
+                fft2d_mask_abs_oneplane = fft2d_abs_oneplane;
+                fft2d_mask_abs_oneplane(mask) = nan;
+                fft2d_mask_pha_oneplane = fft2d_pha_oneplane;
+                fft2d_mask_pha_oneplane(mask) = nan;
+                for ii = 1:lxc
+                    for jj = 1:lyc
+                        fft2d_abs(ii, jj, upper_index_bound(ii, jj): lower_index_bound(ii, jj))...
+                            = fft2d_abs_oneplane(ii, jj);
+                        fft2d_pha(ii, jj, upper_index_bound(ii, jj): lower_index_bound(ii, jj))...
+                            = fft2d_pha_oneplane(ii, jj);
+                        fft2d_mask(ii, jj, upper_index_bound(ii, jj): lower_index_bound(ii, jj))...
+                            = fft2d_mask_abs_oneplane(ii, jj); % abs
+                        fft2d_mask(ii, jj, upper_index_bound(ii, jj): lower_index_bound(ii, jj))...
+                            = fft2d_mask_pha_oneplane(ii, jj);     % pha
+                    end
+                end
+                %
+                cos_pha = cos(fft2d_pha_oneplane);
+                cos_pha = imgaussfilt(cos_pha);
+                phase_info(i, :) = cos_pha(ind);
+                % end loop in one Cscan
+                clc;
+                disp(['Procedure: ', num2str(round(100*ratios(i)/ratios(end))), '%']);
+            end
+            %
+            disp(['number of nan ', num2str(round(sum(isnan(fft2d_abs), 'all')))]);
+            
+            % average abs
+            ave_fft2d_abs = mean(fft2d_abs, 3, 'omitnan');
+            [B,ind]       = maxk(ave_fft2d_abs(:), 10);
+            [row,col]     = ind2sub(size(ave_fft2d_abs),ind);
+            imagesc(ave_fft2d_abs);
+            hold on;
+            scatter(row, col, 15, 'ro');
+            hold on;
+            scatter(row, col, 15, 'ro');
+            
+            %
+            obj.fft2d_abs_fingerprint = fft2d_abs;
+            obj.fft2d_pha_fingerprint = fft2d_pha;
+            obj.fft2d_mask_fingerprint = fft2d_mask;
+        end
+        
+        function obj = fingerprint_2dfft_fitsurface_v2(obj, ratios, PropertyName)
+            % find 2dfft features along z depth,
+            % fitting the surface profiles
+            % start
+            [lxc, lyc, lzc] = size(obj.(PropertyName));
+            fft2d_abs       = NaN(lxc, lyc, length(ratios));
+            fft2d_pha       = NaN(lxc, lyc, length(ratios));
+            fft2d_mask      = NaN(lxc, lyc, length(ratios), 2);
+            % incl. location, phase, amplitude ...
+            row = [70;82;63;89;94;58;63;89;76;76];
+            col = [89;63;63;89;76;76;81;71;57;95];
+            phase_info = nan(length(ratios), length(row));
+            ind = sub2ind(size(fft2d_pha), row, col); % convert to linear index
+            for i = 1:length(ratios)
+                ratio = ratios(i);
+                [~, C_scan_inam_para, ~] = obj.define_parallel_inamCscan(ratio, PropertyName);
+                % no filter
+                C_scan_inam_para_denoise = C_scan_inam_para;
+                % ****** fit a plane
+                [x_mesh, y_mesh] = meshgrid(1:lxc, 1:lyc);
+                plane_surfacefit = fit([x_mesh(:), y_mesh(:)], C_scan_inam_para_denoise(:), 'poly11');
+                plane_surface    = plane_surfacefit(x_mesh, y_mesh);
+                C_scan_inam_para_denoise = C_scan_inam_para_denoise - plane_surface;
+                % 2d fft
+                % now make 2D fft of original image
+                %                 nfftx         = 2^nextpow2(lxc);
+                %                 nffty         = 2^nextpow2(lyc);
+                %
+                fft2D         = fft2(C_scan_inam_para_denoise, lxc, lyc);
+                fft2D_shifted = fftshift(fft2D);
+                % normalize
+                fft2D_shifted(floor(end/2+1), floor(end/2+1)) = nan;
+                fft2D_shifted = fft2D_shifted/max(abs(fft2D_shifted), [], 'all', 'omitnan');
+                % mask
+                fft2d_abs_oneplane = 20*log10(abs(fft2D_shifted));
+                fft2d_pha_oneplane = angle(fft2D_shifted);
+                %
+                mask = fft2d_abs_oneplane<mean(fft2d_abs_oneplane(:), 'omitnan')+6;
+                fft2d_mask_abs_oneplane = fft2d_abs_oneplane;
+                fft2d_mask_abs_oneplane(mask) = nan;
+                fft2d_mask_pha_oneplane = fft2d_pha_oneplane;
+                fft2d_mask_pha_oneplane(mask) = nan;
+                for ii = 1:lxc
+                    for jj = 1:lyc
+                        fft2d_abs(ii, jj, i) = fft2d_abs_oneplane(ii, jj);
+                        fft2d_pha(ii, jj, i) = fft2d_pha_oneplane(ii, jj);
+                        fft2d_mask(ii, jj, i, 1) = fft2d_mask_abs_oneplane(ii, jj); % abs
+                        fft2d_mask(ii, jj, i, 2) = fft2d_mask_pha_oneplane(ii, jj);     % pha
+                    end
+                end
+                %
+                cos_pha = cos(fft2d_pha_oneplane);
+                cos_pha = imgaussfilt(cos_pha);
+                phase_info(i, :) = cos_pha(ind);
+                % end loop in one Cscan
+                clc;
+                disp(['Procedure: ', num2str(round(100*ratios(i)/ratios(end))), '%']);
+            end
+            %
+            disp(['number of nan ', num2str(round(sum(isnan(fft2d_abs), 'all')))]);
+            
+            % average abs
+            ave_fft2d_abs = mean(fft2d_abs, 3, 'omitnan');
+            [~,ind]       = maxk(ave_fft2d_abs(:), 10);
+            [row,col]     = ind2sub(size(ave_fft2d_abs),ind);
+            imagesc(ave_fft2d_abs);
+            hold on;
+            scatter(row, col, 45, 'ro');
+            %
+            obj.fft2d_abs_fingerprint = fft2d_abs;
+            obj.fft2d_pha_fingerprint = fft2d_pha;
+            obj.fft2d_mask_fingerprint = fft2d_mask;
+        end
+        
+        function [best_object, best_location] = fingerprint_oneply(obj, z, PropertyName)
+            % check fingerpint of one woven ply
+            % z: z index. unit: data points
+            % PropertyName: property to sue
+            % ***
+            % fillna
+            %             C_scan_inam = abs(obj.(PropertyName)(:, :, z));
+            [~, C_scan_inam, ~] = obj.define_parallel_inamCscan(z, PropertyName);
+            C_scan_inam(isnan(C_scan_inam)) = mean(C_scan_inam, 'all', 'omitnan');
+            [m, n] = size(C_scan_inam);
+            %
+            % now make 2D fft of original image
+            %             nfftx         = 2^nextpow2(m);
+            %             nffty         = 2^nextpow2(n);
+            % cannot solve the problem when nfftx!=nffty !
+            %             nfftx         = max(nfftx, nffty);
+            %             nffty         = max(nfftx, nffty);
+            %
+            %             fft2D         = fft2(C_scan_inam, nfftx, nffty);
+            %             fft2D_shifted = fftshift(fft2D);
+            %             % Gaussian Filter Response Calculation
+            %             X              = -nfftx/2+1: nfftx/2;
+            %             Y              = -nffty/2+1:nffty/2;
+            % ****** fit a plane
+            [x_mesh, y_mesh] = meshgrid(1:m, 1:n);
+            plane_surfacefit = fit([x_mesh(:), y_mesh(:)], C_scan_inam(:), 'poly11');
+            plane_surface    = plane_surfacefit(x_mesh, y_mesh);
+            C_scan_inam_detrend = C_scan_inam - plane_surface;
+            %
+            h = max(C_scan_inam_detrend(:))/2 + abs(min(C_scan_inam_detrend(:))/2);
+            omega = 2 * pi * 600 / obj.fx;
+            best_object   = 1e10;
+            best_location = [1 1];
+            % *** debug
+            surface = fx_SinuSurface(h, omega, best_location(1)*2*pi/pha1_range, ...
+                best_location(2)*2*pi/pha2_range, x_mesh, y_mesh);
+            figure, surf(C_scan_inam_detrend);
+            colormap(jet);
+            hold on;
+            surf(surface,'FaceAlpha',0.5, 'EdgeColor','none');
+            % ******
+            pha1_range = 30;
+            pha2_range = 30;
+            %             object_fit = nan(pha1_range, pha2_range);
+            for i = 1:pha1_range
+                for j = 1:pha2_range
+                    phase1 = 2*pi * i/pha1_range;
+                    phase2 = 2*pi * j/pha2_range;
+                    surface = fx_SinuSurface(h, omega, phase1, phase2, x_mesh, y_mesh);
+                    object_t = sum((C_scan_inam_detrend - surface).^2, 'all', 'omitnan');
+                    % % save
+                    %                     object_fit(i,j) = object_t;
+                    % % search for best solution
+                    if best_object > object_t
+                        best_location = [i j];
+                        best_object = object_t;
+                    end
+                end
+            end
+            % ***********
+            %             % **** plot original
+            %             cf = figure('Name', ['C_scan_amp' , '_', num2str(z)]);
+            %             set(cf, 'Position', [0, 0, 1200, 400], 'color', 'white');
+            %             ax     = subplot(1, 3, 1);
+            %             Xd     = (1: m) / obj.fx * 1e3;
+            %             Yd     = (1: n) / obj.fy * 1e3;
+            %             imagesc(ax, Yd, Xd, abs(C_scan_inam));
+            %             axis image;
+            %             hold on;
+            %             h = colorbar; colormap(ax, jet);
+            %             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (dB)');
+            %             xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            %             ylabel('\fontname {times new roman} Y displacement (mm) ', 'fontsize', 16);
+            %             set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            %             set(gca, 'linewidth', 2);
+            %             ax     = subplot(1, 3, 2);
+            %             log_abs_2dfft                   =  20*log10(abs(fft2D_shifted)/nfftx/nffty);
+            %             log_abs_2dfft(end/2+1, end/2+1) = NaN; % remove DC;
+            %             imagesc(obj.fx*X/nfftx, obj.fy*Y/nffty, log_abs_2dfft); % divide by the x and y length: nfftx and nffty
+            %             %             imagesc(obj.fx*X/nfftx, obj.fy*Y/nffty, real(fft2D_shifted)/nfftx/nffty); % divide by the x and y length: nfftx and nffty
+            %             axis image;
+            %             h = colorbar; colormap(jet);
+            %             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (dB)');
+            %             xlabel('\fontname {times new roman} X wavenumber (1/m) ', 'fontsize', 16);
+            %             ylabel('\fontname {times new roman} Y wavenumber (1/m)', 'fontsize', 16);
+            %             set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            %             set(ax, 'linewidth', 2);
+            %             ax     = subplot(1, 3, 3);
+            %             imagesc(obj.fx*X/nfftx, obj.fy*Y/nffty, angle(fft2D_shifted)); % divide by the x and y length: nfftx and nffty
+            %             % imagesc(obj.fx*X/nfftx, obj.fy*Y/nffty, imag(fft2D_shifted)/nfftx/nffty); % divide by the x and y length: nfftx and nffty
+            %             axis image;
+            %             h = colorbar; colormap(ax, gray);
+            %             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Phase (rad.)');
+            %             xlabel('\fontname {times new roman} X wavenumber (1/m) ', 'fontsize', 16);
+            %             ylabel('\fontname {times new roman} Y wavenumber (1/m)', 'fontsize', 16);
+            %             set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            %             set(ax, 'linewidth', 2);
+        end
+        
         % ************************ 3D fft *********************************
         function obj = nDfft(obj, ra, rb, rc, F_type)
             % perform 3d fft on the original img
             img_temp = obj.img_hil; % apply fft on the analytic-signal directly
-%             [lx, ly, lz] = size(img_temp);
-%             l = nextpow2(lx);
-%             m = nextpow2(ly);
-%             n = nextpow2(lz);
-%             ndfft = fftn(img_temp, [2^l 2^m 2^n]);
-%             ndfft = fftshift(ndfft);   
+            %             [lx, ly, lz] = size(img_temp);
+            %             l = nextpow2(lx);
+            %             m = nextpow2(ly);
+            %             n = nextpow2(lz);
+            %             ndfft = fftn(img_temp, [2^l 2^m 2^n]);
+            %             ndfft = fftshift(ndfft);
             img_filtered2 = fx_lowpass_3dfft(img_temp, ra, rb, rc, F_type);
-
+            
             % f = obj.fs * (0:(l / 2)) / l;
             obj.img_3dfft  = ndfft;
             obj.img_fftfilter =img_filtered2;
@@ -912,9 +1632,9 @@ classdef class_process_woven_RFdata < class_process_RFdata
             img_temp    = obj.(propertyName);
             img_hilbert = nan(size(img_temp));
             for i = 1: size(img_hilbert, 1)
-%                 for j = 1:size(img_hilbert, 2)
-%                     
-%                 end
+                %                 for j = 1:size(img_hilbert, 2)
+                %
+                %                 end
                 bscan     = squeeze(img_temp(i, :, :));
                 bscan_hil = hilbert(bscan.'); %　hilbert for each colume at 2D matrix
                 img_hilbert(i, :, :) = bscan_hil.'; %　hilbert for each colume at 2D matrix
@@ -936,34 +1656,34 @@ classdef class_process_woven_RFdata < class_process_RFdata
             % plot the 2d spectrum
             [m, n] = size(amp_max);
             
-%             % ************* debug and EDA ***************** %
-%             inam_ex  = abs(obj.img_hil);
-%             inph_ex  = angle(obj.img_hil);
-%             infq_ex  = diff(unwrap(inph_ex, [], 3), 1, 3) /2 / pi * obj.fs;
-%             
-%             infq_ex_single = infq_ex>10e6;
-%             infq_ex_single(infq_ex>10e6) = 100;
-%             infq_ex_single(infq_ex<2e6) = -100;
-%             infq_ex_single(infq_ex>2e6 & infq_ex<10e6) = 0;               
-% %             volumeViewer(inph_ex);
-%             close all;
-%             temp   = inph_ex(:,:,600); % select the range
-%             Xd     = (1: m) / obj.fx * 1e3;
-%             Yd     = (1: n) / obj.fy * 1e3;
-%             figure, imagesc(Yd, Xd, temp);
-%             % now make 2D fft of original image
-%             nfftx = 2^nextpow2(m);
-%             nffty = 2^nextpow2(n);
-%             nfftx = max(nfftx, nffty); % cannot tackle the issue of different nfftx and nffty.
-%             nffty = max(nfftx, nffty);
-%             %
-%             fft2D         = fft2(temp, nfftx, nffty);
-%             fft2D_shifted = fftshift(fft2D);
-%             X              = -nfftx/2+1: nfftx/2;
-%             Y              = -nffty/2+1:nffty/2;
-%             figure, imagesc(X, Y, 20*log10(abs(fft2D_shifted)/m/n)); % divide by the x and y length: nfftx and nffty
-%             axis image;
-%             % ************* end EDA ***************** %
+            %             % ************* debug and EDA ***************** %
+            %             inam_ex  = abs(obj.img_hil);
+            %             inph_ex  = angle(obj.img_hil);
+            %             infq_ex  = diff(unwrap(inph_ex, [], 3), 1, 3) /2 / pi * obj.fs;
+            %
+            %             infq_ex_single = infq_ex>10e6;
+            %             infq_ex_single(infq_ex>10e6) = 100;
+            %             infq_ex_single(infq_ex<2e6) = -100;
+            %             infq_ex_single(infq_ex>2e6 & infq_ex<10e6) = 0;
+            % %             volumeViewer(inph_ex);
+            %             close all;
+            %             temp   = inph_ex(:,:,600); % select the range
+            %             Xd     = (1: m) / obj.fx * 1e3;
+            %             Yd     = (1: n) / obj.fy * 1e3;
+            %             figure, imagesc(Yd, Xd, temp);
+            %             % now make 2D fft of original image
+            %             nfftx = 2^nextpow2(m);
+            %             nffty = 2^nextpow2(n);
+            %             nfftx = max(nfftx, nffty); % cannot tackle the issue of different nfftx and nffty.
+            %             nffty = max(nfftx, nffty);
+            %             %
+            %             fft2D         = fft2(temp, nfftx, nffty);
+            %             fft2D_shifted = fftshift(fft2D);
+            %             X              = -nfftx/2+1: nfftx/2;
+            %             Y              = -nffty/2+1:nffty/2;
+            %             figure, imagesc(X, Y, 20*log10(abs(fft2D_shifted)/m/n)); % divide by the x and y length: nfftx and nffty
+            %             axis image;
+            %             % ************* end EDA ***************** %
             
             % now make 2D fft of original image
             nfftx = 2^nextpow2(m);
@@ -974,7 +1694,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             fft2D         = fft2(amp_max, nfftx, nffty);
             fft2D_shifted = fftshift(fft2D);
             X              = -nfftx/2+1: nfftx/2;
-            Y              = -nffty/2+1:nffty/2;   
+            Y              = -nffty/2+1:nffty/2;
             cf = figure('Name', ['2Dspectrum', '_', num2str(zrange)]);
             set(cf, 'Position', [0, 0, 600, 800], 'color', 'white');
             ax     = subplot(1, 1, 1);
@@ -1005,28 +1725,28 @@ classdef class_process_woven_RFdata < class_process_RFdata
                     amp_max_filter = amp_max;
             end
             
-%             [Y, X]       = size(amp_max);
-%             cw           = [5 10 20 40];
-%             filtStruct   = createMonogenicFilters(Y, X, cw, 'lg', 0.66);
-%             [m1, m2, m3] = monogenicSignal(amp_max, filtStruct);
-% %             [m1, m2, m3] = monogenicSignal_nofilter(amp_max, filtStruct);
-%             close all;
-%             % Local energy (calculated on a per-scale basis)
-%             LE = localEnergy(m1, m2, m3);
-%             % Local phase (calculated on a per-scale basis)
-%             LP = localPhase(m1, m2, m3);
-%             % Local orientation (calculated on a per-scale basis)
-%             % Only need to pass the odd parts (m2,m3) as even part (m1) is irrelevant
-%             LO = localOrientation(m2, m3);
-% 
-%             for i = 1:size(LE, 4)
-%                 figure();
-%                 C_scan_inam_denoise = sqrt(LE(:, :, :, i)); % local amplitdue = sqrt(local energy)!
-%                 imagesc(C_scan_inam_denoise), axis image;
-%                 colormap jet;
-%                 h = colorbar;
-%                 set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
-%             end
+            %             [Y, X]       = size(amp_max);
+            %             cw           = [5 10 20 40];
+            %             filtStruct   = createMonogenicFilters(Y, X, cw, 'lg', 0.66);
+            %             [m1, m2, m3] = monogenicSignal(amp_max, filtStruct);
+            % %             [m1, m2, m3] = monogenicSignal_nofilter(amp_max, filtStruct);
+            %             close all;
+            %             % Local energy (calculated on a per-scale basis)
+            %             LE = localEnergy(m1, m2, m3);
+            %             % Local phase (calculated on a per-scale basis)
+            %             LP = localPhase(m1, m2, m3);
+            %             % Local orientation (calculated on a per-scale basis)
+            %             % Only need to pass the odd parts (m2,m3) as even part (m1) is irrelevant
+            %             LO = localOrientation(m2, m3);
+            %
+            %             for i = 1:size(LE, 4)
+            %                 figure();
+            %                 C_scan_inam_denoise = sqrt(LE(:, :, :, i)); % local amplitdue = sqrt(local energy)!
+            %                 imagesc(C_scan_inam_denoise), axis image;
+            %                 colormap jet;
+            %                 h = colorbar;
+            %                 set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            %             end
             % find the average peak amplitudes
             amp_max_mean = mean(amp_max_filter, 'all');
             log_amp_max  = 20*log10(amp_max_filter);
@@ -1039,7 +1759,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             set(cf, 'Position', [0, 0, 600, 800], 'color', 'white');
             ax     = subplot(2, 1, 1);
             imagesc(ax, Yd, Xd, amp_max_filter);
-            axis image; 
+            axis image;
             colormap(ax, jet);
             hold on;
             h = colorbar;
@@ -1051,7 +1771,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             % ground truth
             ax     = subplot(2, 1, 2);
             imagesc(ax, Yd, Xd, groudtruth);
-            axis image; 
+            axis image;
             colormap(ax, gray);
             hold on;
             h = colorbar;
@@ -1061,8 +1781,8 @@ classdef class_process_woven_RFdata < class_process_RFdata
             set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
             set(ax, 'linewidth', 2);
         end
-            
-            
+        
+        
     end
 end
 
