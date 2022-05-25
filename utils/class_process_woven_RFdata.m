@@ -7,6 +7,8 @@ classdef class_process_woven_RFdata < class_process_RFdata
         fft2d_abs_fingerprint
         fft2d_pha_fingerprint
         fft2d_mask_fingerprint
+        % 3D ID 
+        Inplane_direction_3D_ID_ztheta
     end
     
     methods
@@ -1339,6 +1341,156 @@ classdef class_process_woven_RFdata < class_process_RFdata
             obj.rear_I = rear_I;
         end
         
+        % ********************* 3D ID ********************
+        function obj = extract_local_orientation_3DID(obj, PropertyName, wl, orientation, z_theta, z_range, K)
+            % extract the local orientation image in each ply
+            % PropertyName: 'img', 'img_hil' or 'img_hil_filter' ...
+            % wavelength: wavelengths of the filter bank for logGabor filter gabor
+            % orientation: orientations of the filter bank for logGabor filter gabor
+            % ratios: the ratio determing the index by the front and back surfaces , unit: arb.
+            % K: the smoothing applied to the Gabor magnitude responses.
+            % sigma: threshould for curvelet denoising, 0 means no application of denoising
+            % ***
+            % start
+            img_temp  = obj.(PropertyName);
+            img_temp  = abs(img_temp(:, :, z_range(1): z_range(2)));
+            [m, n, l] = size(img_temp); 
+%             m_np2     = nextpow2(m);
+%             n_np2     = nextpow2(n);    
+%             l_np2     = nextpow2(l);
+%             % Gaussian filter
+%             sigma       = [0.1 0.1 10];
+%             img_temp    = imgaussfilt3(img_temp, sigma);
+            Inplane_direction           = zeros([m, n, l]);
+            Inplane_direction_index_ori = zeros([m, n, l]);
+            Inplane_direction_index_zth = zeros([m, n, l]);
+            statistic_mean = zeros([m, n, l]);
+            statistic_std  = zeros([m, n, l]);
+            SFB = 1.5;
+            SAR = 0.5;
+            %
+            disp('convolution calculation...');
+            for i = 1:length(orientation)
+                for j = 1:length(z_theta)
+                    h       = fx_handwritten_3DGabor(orientation(i), wl, z_theta(j), SFB, SAR);
+                    %                     fftSize = [2^m_np2, 2^n_np2, 2^l_np2];
+                    size_h = size(h);
+                    fftSize = size_h + [m n l] - 1;
+                    A_k = ifftn( fftn(img_temp, fftSize) .* fftn(real(h), fftSize), 'symmetric' );
+                    A_k = imgaussfilt3(A_k, K* 0.5*wl);
+                    A_k = A_k(end/2-m/2+1:end/2+m/2, ...
+                        end/2-n/2+1:end/2+n/2, ...
+                        end/2-l/2+1:end/2+l/2);
+                    statistic_mean = statistic_mean + A_k;
+                    statistic_std  = statistic_std + A_k.^2;
+                    %                     A_k = A_k(wl+1:end-wl, wl+1:end-wl, :);
+                    %               A_k = A_k(end/2-m/2+wavelength+1:end/2+m/2-wavelength, ...
+                    %                         end/2-n/2+wavelength+1:end/2+n/2-wavelength, ...
+                    %                         end/2-l/2+wavelength+1:end/2+l/2-wavelength);
+                    % update the maximum
+                    compare = A_k>=Inplane_direction; % logic larger or not
+                    Inplane_direction_index_ori = Inplane_direction_index_ori.*(1-compare) + i.*compare;
+                    Inplane_direction_index_zth = Inplane_direction_index_zth.*(1-compare) + j.*compare;
+                    Inplane_direction = Inplane_direction .*(1-compare) + A_k.*compare;
+%                     compare = A_k>=Inplane_direction(wl+1:end-wl, wl+1:end-wl, :); % logic larger or not
+%                     Inplane_direction_index_ori(wl+1:end-wl, wl+1:end-wl, :)...
+%                         = Inplane_direction_index_ori(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + i.*compare;
+%                     Inplane_direction_index_zth(wl+1:end-wl, wl+1:end-wl, :)...
+%                         = Inplane_direction_index_zth(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + j.*compare;
+%                     Inplane_direction(wl+1:end-wl, wl+1:end-wl, :)...
+%                         = Inplane_direction(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + A_k.*compare;
+                end
+                clc;
+                fprintf('ID searching progress: %0.2f%%\n',100*i/length(orientation));
+            end
+            % statistic
+            N = length(orientation)*length(z_theta);
+            statistic_mean = statistic_mean ./ N;
+            statistic_std  = sqrt( (statistic_std - statistic_mean.^2*N)/(N-1) );      
+            % remove extra parts
+            Inplane_direction_index_ori(1:wl, :, :) = nan;
+            Inplane_direction_index_ori(:, 1:wl, :) = nan;
+            Inplane_direction_index_ori(end-wl:end, :, :) = nan;
+            Inplane_direction_index_ori(:, end-wl:end, :) = nan;
+            Inplane_direction_index_zth(1:wl, :, :) = nan;
+            Inplane_direction_index_zth(:, 1:wl, :) = nan;
+            Inplane_direction_index_zth(end-wl:end, :, :) = nan;
+            Inplane_direction_index_zth(:, end-wl:end, :) = nan;
+            % statistic removement
+            statistic_mean_remove = Inplane_direction<statistic_mean + statistic_std .* 1.5;
+            Inplane_direction_index_ori(statistic_mean_remove) = nan;
+            Inplane_direction_index_zth(statistic_mean_remove) = nan;
+%             [m,n,p] = size(Inplane_direction_index_ori);
+%             rear_I_temp = obj.rear_I;
+%             front_I_temp = obj.front_I;
+%             for i = 1:m
+%                 for j =1:n
+%                     Inplane_direction_index_ori(i,j, 1:front_I_temp(i,j)) = nan;
+%                     if p>rear_I_temp(i,j)
+%                         Inplane_direction_index_ori(i,j, rear_I_temp(i,j):p) = nan;
+%                     end
+%                 end
+%             end     
+            obj.Inplane_direction_3D_ID = Inplane_direction_index_ori / length(orientation) * 180;
+            obj.Inplane_direction_3D_ID_ztheta = Inplane_direction_index_zth / length(orientation) * 180; 
+        end
+        
+        function obj = extract_local_orientation_3DID_plane(obj, PropertyName, wavelength, y_ori, z_ori, z_range, K)
+            % extract the local orientation image in each ply
+            % PropertyName: 'img', 'img_hil' or 'img_hil_filter' ...
+            % wavelength: wavelengths of the filter bank for logGabor filter gabor
+            % orientation: orientations of the filter bank for logGabor filter gabor
+            % ratios: the ratio determing the index by the front and back surfaces , unit: arb.
+            % K: the smoothing applied to the Gabor magnitude responses.
+            % sigma: threshould for curvelet denoising, 0 means no application of denoising
+            % ***
+            % start
+            img_temp = obj.(PropertyName);
+            img_temp = abs(img_temp(:, :, z_range(1): z_range(2)));
+            %             % Gaussian filter
+            %             sigma       = [0.1 0.1 10];
+            %             img_temp    = imgaussfilt3(img_temp, sigma);
+            Inplane_direction = zeros(size(img_temp));
+            Inplane_direction_index_ori = zeros(size(img_temp));
+            Inplane_direction_index_zth = zeros(size(img_temp));
+            SFB = 1.5;
+            SAR = 0.5;
+            %
+            x_theta = 0; % only need to rotate y and z
+            disp('convolution calculation...');
+            for i = 1:length(y_ori)
+                for j = 1:length(z_ori)
+                    y_theta = 90 + y_ori(i);
+                    z_theta = z_ori(j);
+                    thetas = [x_theta, y_theta, z_theta];
+                    h = fx_handwritten_3DGabor_plane(thetas, wavelength, SFB, SAR);
+                    fftSize = size(img_temp);
+                    A_k   = ifftn( fftn(img_temp, fftSize) .* fftn(real(h), fftSize), 'symmetric' );
+                    A_k = imgaussfilt3(A_k, K* 0.5*wavelength);
+                    % update the maximum
+                    compare = A_k>=Inplane_direction; % logic larger or not
+                    Inplane_direction_index_ori = Inplane_direction_index_ori.*(1-compare) + i.*compare;
+                    Inplane_direction_index_zth = Inplane_direction_index_zth.*(1-compare) + j.*compare;
+                    Inplane_direction = Inplane_direction.*(1-compare) + A_k.*compare;
+                end
+                clc;
+                fprintf('ID searching progress: %0.2f%%\n',100*i/length(y_ori));
+            end
+            %             % remove extra parts
+            %             [m,n,p] = size(Inplane_direction_index_ori);
+            %             rear_I_temp = obj.rear_I;
+            %             front_I_temp = obj.front_I;
+            %             for i = 1:m
+            %                 for j =1:n
+            %                     Inplane_direction_index_ori(i,j, 1:front_I_temp(i,j)) = nan;
+            %                     if p>rear_I_temp(i,j)
+            %                         Inplane_direction_index_ori(i,j, rear_I_temp(i,j):p) = nan;
+            %                     end
+            %                 end
+            %             end
+            obj.Inplane_direction_3D_ID = Inplane_direction_index_ori / length(orientation) * 180;
+        end
+        
         % ******************** fingerprint of ply *********************
         function obj = fingerprint_2dfft_fitsurface(obj, ratios, PropertyName)
             % find 2dfft features along z depth,
@@ -1457,10 +1609,10 @@ classdef class_process_woven_RFdata < class_process_RFdata
                 % no filter
                 C_scan_inam_para_denoise = C_scan_inam_para;
                 % ****** fit a plane
-                [x_mesh, y_mesh] = meshgrid(1:lxc, 1:lyc);
-                plane_surfacefit = fit([x_mesh(:), y_mesh(:)], C_scan_inam_para_denoise(:), 'poly11');
-                plane_surface    = plane_surfacefit(x_mesh, y_mesh);
-                C_scan_inam_para_denoise = C_scan_inam_para_denoise - plane_surface;
+                [x_mesh, y_mesh]         = meshgrid(1:lxc, 1:lyc);
+                plane_surfacefit         = fit([x_mesh(:), y_mesh(:)], C_scan_inam_para_denoise(:), 'poly11');
+                plane_surface            = plane_surfacefit(x_mesh, y_mesh);
+                C_scan_inam_para_denoise = C_scan_inam_para_denoise - plane_surface.';
                 % 2d fft
                 % now make 2D fft of original image
                 %                 nfftx         = 2^nextpow2(lxc);
@@ -1469,8 +1621,9 @@ classdef class_process_woven_RFdata < class_process_RFdata
                 fft2D         = fft2(C_scan_inam_para_denoise, lxc, lyc);
                 fft2D_shifted = fftshift(fft2D);
                 % normalize
-                fft2D_shifted(floor(end/2+1), floor(end/2+1)) = nan;
-                fft2D_shifted = fft2D_shifted/max(abs(fft2D_shifted), [], 'all', 'omitnan');
+                fft2D_shifted = fft2D_shifted/lxc/lyc;
+%                 fft2D_shifted(floor(end/2+1), floor(end/2+1)) = nan;
+%                 fft2D_shifted = fft2D_shifted/max(abs(fft2D_shifted), [], 'all', 'omitnan');
                 % mask
                 fft2d_abs_oneplane = 20*log10(abs(fft2D_shifted));
                 fft2d_pha_oneplane = angle(fft2D_shifted);
@@ -1498,7 +1651,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             end
             %
             disp(['number of nan ', num2str(round(sum(isnan(fft2d_abs), 'all')))]);
-            
+  
             % average abs
             ave_fft2d_abs = mean(fft2d_abs, 3, 'omitnan');
             [~,ind]       = maxk(ave_fft2d_abs(:), 10);
@@ -1536,26 +1689,25 @@ classdef class_process_woven_RFdata < class_process_RFdata
             %             X              = -nfftx/2+1: nfftx/2;
             %             Y              = -nffty/2+1:nffty/2;
             % ****** fit a plane
-            [x_mesh, y_mesh] = meshgrid(1:m, 1:n);
-            plane_surfacefit = fit([x_mesh(:), y_mesh(:)], C_scan_inam(:), 'poly11');
-            plane_surface    = plane_surfacefit(x_mesh, y_mesh);
-            C_scan_inam_detrend = C_scan_inam - plane_surface;
+            [x_mesh, y_mesh]    = meshgrid(1:m, 1:n);
+            plane_surfacefit    = fit([x_mesh(:), y_mesh(:)], C_scan_inam(:), 'poly11');
+            plane_surface       = plane_surfacefit(x_mesh, y_mesh);
+            C_scan_inam_detrend = C_scan_inam - plane_surface.';
             %
             h = max(C_scan_inam_detrend(:))/2 + abs(min(C_scan_inam_detrend(:))/2);
             omega = 2 * pi * 600 / obj.fx;
             best_object   = 1e10;
             best_location = [1 1];
-            % *** debug
-            surface = fx_SinuSurface(h, omega, best_location(1)*2*pi/pha1_range, ...
-                best_location(2)*2*pi/pha2_range, x_mesh, y_mesh);
-            figure, surf(C_scan_inam_detrend);
-            colormap(jet);
-            hold on;
-            surf(surface,'FaceAlpha',0.5, 'EdgeColor','none');
             % ******
             pha1_range = 30;
             pha2_range = 30;
-            %             object_fit = nan(pha1_range, pha2_range);
+            %             % *** debug
+%             surface = fx_SinuSurface(h, omega, best_location(1)*2*pi/pha1_range, ...
+%                 best_location(2)*2*pi/pha2_range, x_mesh, y_mesh);
+%             figure, surf(C_scan_inam_detrend);
+%             colormap(jet);
+%             hold on;
+%             surf(surface,'FaceAlpha',0.5, 'EdgeColor','none');%             object_fit = nan(pha1_range, pha2_range);
             for i = 1:pha1_range
                 for j = 1:pha2_range
                     phase1 = 2*pi * i/pha1_range;
@@ -1643,6 +1795,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
             end
             obj.img_hil_filter = img_hilbert;
         end
+        
         % ************************ determine defect size ******************
         function obj = amplitude_drop_method(obj, PropertyName, zrange, drop, filtertype)
             % determine thoverall size of image damagas

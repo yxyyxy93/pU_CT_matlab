@@ -60,11 +60,11 @@ classdef class_deconv
 %             % move the max to the center
 %             [~, maxI] = max(kernel);
 %             kernel = kernel(1: 2* maxI);
-            ori_signal              = obj.recorded_signal;
-            shift                       = round(length(kernel) / 2);
-            n                            = fft_padding;
-            H                           = fft(kernel, n);
-            Y_omega               = fft(real(ori_signal), n);
+            ori_signal = obj.recorded_signal;
+            shift      = round(length(kernel) / 2);
+            n          = fft_padding;
+            H          = fft(kernel, n);
+            Y_omega    = fft(real(ori_signal), n);
             % This constant is sometimes called the ‘‘noise desensitizing factor’’
             Q                           = sqrt(Q_factor * max(H .* conj(H)).^2);
             deconv_spectrum  = Y_omega .* conj(H) ./ (H .* conj(H) + Q.^2);
@@ -94,10 +94,10 @@ classdef class_deconv
                     error("please choose method as 'bg' or 'yk'. ");
                 end
                 % transverse a and rc
-                a                             = a';
-                a_conj                    = conj(a);
+                a      = a';
+                a_conj = conj(a);
                 % extrapolate the miss values outside the window
-                AR_spetrum           = zeros(ns,1);
+                AR_spetrum       = zeros(ns,1);
                 AR_spetrum(m: n) = deconv_spectrum(m: n);
                 % p = 1, 2, ... m - 1
                 for p = m-1: -1: 1
@@ -116,9 +116,9 @@ classdef class_deconv
                 %             %
                 AR_spetrum_ave = AR_spetrum_ave + AR_spetrum;
             end
-            AR_spetrum_ave     = AR_spetrum_ave / size(f_windows, 1);
-            devolved                  = real(ifft(AR_spetrum_ave));
-            deconv                     = circshift(devolved, shift);
+            AR_spetrum_ave = AR_spetrum_ave / size(f_windows, 1);
+            devolved       = real(ifft(AR_spetrum_ave));
+            deconv         = circshift(devolved, shift);
         end
     end
 end

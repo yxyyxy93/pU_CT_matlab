@@ -1,29 +1,46 @@
 function [lct, pkt, errors_pos, inam_ascan, inph_ascan] = fx_track_byphase_step(Idx_resin, ori_signal, fs, threshold, power_noise)
 
+% calculate average TOF ply
 P          = polyfit(1:length(Idx_resin), Idx_resin, 1);
 Idx_oneply = P(1);
+%
 inph_ascan = angle(hilbert(ori_signal));
 inam_ascan = abs(hilbert(ori_signal));
 infq_ascan = 1/(2*pi) * fs * diff(unwrap(inph_ascan));
 
-% find the peaks in inam, as the front- and back- walls
-MinPeakHeight          = threshold * max(inam_ascan);
-MinPeakDistance        = length(inam_ascan) / 2;
-[pks_walls, Idx_walls] = findpeaks(inam_ascan, 1:length(inam_ascan), 'MinPeakHeight',  MinPeakHeight, 'MinPeakDistance', MinPeakDistance);
-front_I                = round(Idx_walls(1));
-back_I                 = round(Idx_walls(end));
+%
+front_I = round(Idx_resin(1));
+back_I  = round(Idx_resin(end));
+lct      = NaN(1, length(Idx_resin));
+lct(1)   = front_I;
+lct(end) = back_I;
+phase_0 = interp1(round(front_I)+(-1:1), inph_ascan(round(front_I)+(-1:1)), front_I);
 
-% set the region of each layer and find the postion where
-% the phase is closest to - pi / 2
-pkt                     = NaN(1, length(Idx_resin));
-lct                     = NaN(1, length(Idx_resin));
-lct(1)                  = front_I;
-lct(end)                = back_I;
-pkt(1)                  = pks_walls(1);
-pkt(end)                = pks_walls(end);
-% interpolation
-phase_0                 = interp1(round(front_I)+(-1:1), inph_ascan(round(front_I)+(-1:1)), front_I);
-pkt(1)                  = phase_0; % all the pkt are phases!
+% find the peaks in inam, as the front- and back- walls
+% MinPeakHeight          = threshold * max(inam_ascan);
+% MinPeakDistance        = length(inam_ascan) / 2;
+% [pks_walls, Idx_walls] = findpeaks(inam_ascan, 1:length(inam_ascan), 'MinPeakHeight',  MinPeakHeight, 'MinPeakDistance', MinPeakDistance);
+% if isempty(pks_walls)
+%     front_I = nan;
+%     lct     = [];
+%     pkt     = [];
+%     errors_pos = [];
+%     Idx_resin = []; % just end the function.
+% else
+%     front_I = round(Idx_walls(1));
+%     back_I  = round(Idx_walls(end));
+%     % set the region of each layer and find the postion where
+%     % the phase is closest to - pi / 2
+%     pkt                     = NaN(1, length(Idx_resin));
+%     lct                     = NaN(1, length(Idx_resin));
+%     lct(1)                  = front_I;
+%     lct(end)                = back_I;
+%     pkt(1)                  = pks_walls(1);
+%     pkt(end)                = pks_walls(end);
+%     % interpolation
+%     phase_0                 = interp1(round(front_I)+(-1:1), inph_ascan(round(front_I)+(-1:1)), front_I);
+%     pkt(1)                  = phase_0; % all the pkt are phases!
+% end
 
 % % find the back-wall echo by phase at first
 % idx_layer_n1            = max(front_I, round(Idx_resin(end) - Idx_oneply / 2));

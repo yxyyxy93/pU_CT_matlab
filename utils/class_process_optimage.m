@@ -680,11 +680,15 @@ classdef class_process_optimage
                     ID                      = reshape(ID, [obj.frow, obj.fcol]);
                     %                     ID_shift = circshift(ID, round(size(ID, 2) / 2), 2);
                     %                     ID_sub = ID - ID_shift;
-                    [C, I]                  = max(ID(:));
-                    if C <= mean(ID,'all') + std(ID, 0, 'all')
+                    [C, I]          = max(ID(:));                
+                    [indwl, indAng] = ind2sub(size(ID), I);
+%                     if C <= mean(ID(indwl, :), 'omitnan') + 2*std(ID(indwl,:), 'omitnan')
+%                         continue;
+%                     end
+                    k = kurtosis(ID(indwl, :));
+                    if k <= 2.2
                         continue;
                     end
-                    [indwl, indAng]         = ind2sub(size(ID),I);
                     image_orientation(i, j) = orientation(indAng);
                     image_wavelength(i, j)  = wavelength(indwl);
                     % sum up ID
@@ -824,6 +828,12 @@ classdef class_process_optimage
             ID              = reshape(ID, [obj.frow, obj.fcol]);
             [~, I]          = max(ID(:));
             [indwl, indAng] = ind2sub(size(ID),I);
+            % **********
+            k     = kurtosis(ID(indwl,:));
+            fprintf('kurtosis: %0.2f\n',k);
+            peaka = ID(indwl, indAng) / std(ID(indwl,:));
+            fprintf('max/std: %0.2f\n', peaka);
+            % 
             figure('Name', ['ID_x_' num2str(x) '_y_' num2str(y)]);
             set(gcf, 'Position', [0, 0, 400, 300], 'color', 'white');
             ax = subplot(1, 1, 1);

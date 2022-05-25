@@ -41,7 +41,7 @@ process3.show_img_shape;
 % cut the img, otherwise it could be out of the memory
 % window = [101 180 81 160 1 1500]; 
 % window   = [200 350 270 420 300 1300]; 
-window   = [1 100 1 100 200 1200];  
+window   = [1 270 321 500 1 1500];  
 x_step   = 1;
 y_step   = 1;
 process3 = process3.cut_edges(window, x_step, y_step);
@@ -51,8 +51,8 @@ process3.show_img_shape;
 
 %% show A scan
 % define the index to select Ascan 
-x   = 135;
-y   = 235;
+x   = 35;
+y   = 35;
 % process3.demo_AS_3D_inclinfq(x, y);
 
 process3.show_hilbert_Ascan(x, y);
@@ -60,29 +60,33 @@ process3.show_hilbert_Ascan(x, y);
 %% show C scan
 % define the index to select Ascan 
 close all;
-for z = 50:50:400
-    % z            = ;
+for z = 1000:50:1100
+    % z = ;
     PropertyName = 'img';
-%     process = process.show_Cscan(z, PropertyName);
-    process3.check2dfft_inclphase(z, PropertyName); % 2d spectrum
+    process3 = process3.show_Cscan(z, PropertyName);
+%     process3.check2dfft_inclphase(z, PropertyName); % 2d spectrum
 end
+
+%% low-pass filter
+bandpassFreq = 30e6;
+process3     = process3.Filter_lowpass(bandpassFreq, 'img_hil');
 
 %% surface search
 global min_pks 
 min_pks      = 0.5;
-PropertyName = 'img_hil';
+PropertyName = 'img_hil_filter';
 % process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
 clc;
 % close all;
 
-MinPD   = 25;
+MinPD   = 30;
 MinPH   = 0.015;  % these 2 parameters need to be changed for surface estimation.
 % surface calculation
-max_len = 1250;
-alpha   = 3e-3;
-A_ratio = 0.5;
+max_len = 1499;
+alpha   = 4.5e-3;
+A_ratio = 0.99;
 
-process3.find_front_amp_alpha_Ascan(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio, 120, 120);
+process3.find_front_amp_alpha_Ascan(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio, 220, 55);
 
 %%
 % A_ratio      = 0.4; % for 0.3 m drop
@@ -93,7 +97,7 @@ process3.show_surfaces(filename_fig(1:end-5));
 
 %% check 2 times fft
 temp = process3.img;
-temp = temp(19, 15, :);
+temp = temp(209, 277, :);
 temp = squeeze(temp);
 
 figure, subplot(3, 1, 1);
@@ -105,7 +109,18 @@ subplot(3, 1, 3);
 temp_fft2 = fft(abs(temp_fft));
 plot(abs(temp_fft2(1:end/2)));
 
-process3 = process3.find_surface_2fft(MinPD, MinPH, PropertyName, max_len);
+%%
+PropertyName = 'img_hil';
+max_len      = 1500;
+flag_DG      = 1; % apply DynamicGate
+delay        = 50; % delay for the search on the 2nd fft, unit: points
+filter_flag  = 1;
+passband     = [0.5e6 15e6];
+
+process3 = process3.find_surface_2fft(PropertyName, max_len, flag_DG, delay, filter_flag, passband);
+
+close all;
+process3.show_surfaces(filename_fig(1:end-5));
 
 %% internal damage features
 process3.damage_imaging;
@@ -126,10 +141,17 @@ for z_index = 1:length(z_range)
 end
 
 %% make fingerprint along z depth
-ratios       = 0/20:0.1/20:20/20;
+ratios       = 0/20:0.5/20:20/20;
 PropertyName = 'img_hil';
 % process3     = process3.fingerprint_2dfft_fitsurface(ratios, PropertyName);
 process3     = process3.fingerprint_2dfft_fitsurface_v2(ratios, PropertyName);
+
+%%
+temp  = process3.fft2d_pha_fingerprint;
+temp1 = squeeze(sum(temp, 1, 'omitnan'));
+temp1 = temp1.';
+figure,
+imagesc(temp1);
 
 %%
 temp = process3.fft2d_mask_fingerprint;
@@ -143,7 +165,6 @@ temp_abs = squeeze(temp(:,:,:,2));
 % fill nan  
 temp_abs(isnan(temp_abs)) = min(temp_abs(:));
 orthosliceViewer(temp_abs, 'ScaleFactors', [1 1 1], 'Colormap', jet);
-
 
 %process3.fft2d_abs_fingerprint;
 close all;
@@ -209,36 +230,52 @@ orthosliceViewer(temp, 'ScaleFactors', [1 1 0.2], 'colormap', jet, 'DisplayRange
 
 % % log-Gabor filter
 % f0        = 6.3e6;
-% sigma     = 0.1;
+% sigma     = 0.7;
 % process3  = process3.Filter_logGabor(f0, sigma, 'img_hil');
 
-% % low-pass filter
+% low-pass filter
 bandpassFreq = 10e6;
 process3     = process3.Filter_lowpass(bandpassFreq, 'img_hil');
 
 threshold    = 0.01;
-% process   = process.track_interply('img_hil_filter');
-process3  = process3.track_interply_inph(threshold, 'img_hil_filter', 21);
+process3     = process3.track_interply('img_hil_filter');
+% process3  = process3.track_interply_inph(threshold, 'img_hil_filter', 21);
 
+% use 2nd-harmonic for first and the last interplies, 
+% use fundamental resonance for another interplies
+f0_1     = 12.8e6;
+sigma0_1 = 0.7;
+f0_2     = 6.3e6;
+sigma0_2 = 0.6;
+nol      = 21; % make it 25+1 in case that there is redundant accidently-tracked interply
+process3 = process3.track_interply_hybrid( ...
+    'img', f0_1, sigma0_1, f0_2, sigma0_2, nol);
 
 %%
 TOF_walls    = -mean(process3.front_I - process3.rear_I, 'all', 'omitnan');
 
-
 close all;
 B_type     = 'x';
-index      = 20;
-Bwin       = 1:151;
+index      = 80;
+Bwin       = 1:270;
 TOF_oneply = TOF_walls / 20; % 24 plies
-process3.show_B_scan_interply(B_type, index, Bwin, 'img_hil_filter');
-
+process3.show_B_scan_interply(B_type, index, Bwin, 'img_hil');
 
 % process.show_track_interply(xslice, yslice, zslice);
-win_x = 1:151;
-win_y = 1:151;
-process3.show_oneinterply(05, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+win_x = 1:270;
+win_y = 1:100;
+process3.show_oneinterply(3, 'logGabor', 3000, win_x, win_y, TOF_oneply);
 process3.show_oneinterply(10, 'logGabor', 3000, win_x, win_y, TOF_oneply);
 process3.show_oneinterply(15, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+
+%%
+close all;
+win_x = 1:270;
+win_y = 1:100;
+process3.show_oneinterply_2dfft(1, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+process3.show_oneinterply_2dfft(2, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+process3.show_oneinterply_2dfft(3, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+process3.show_oneinterply_2dfft(4, 'logGabor', 3000, win_x, win_y, TOF_oneply);
 
 %% knn
 process3.show_interply_track_3D;
@@ -613,7 +650,7 @@ volumeViewer(LA);
 %% 3D monogenic signal display
 % Display one slice
 % 
-zslice = 250; % near the middle
+zslice = 50; % near the middle
 figure()
 imshow(D(:,:,zslice)), axis image, colormap jet
 title('Test Volume Slice')
@@ -632,7 +669,7 @@ title('3D Feature Symmetry and Asymmetry');
 
 % 
 close all;
-xslice = 150; % near the middle
+xslice = 50; % near the middle
 figure()
 imgshow = squeeze(D(:,xslice,:));
 imshow(rot90(imgshow, 3)), axis image, colormap jet

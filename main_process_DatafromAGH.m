@@ -39,11 +39,24 @@ y_step   = 4;
 process  = process.cut_edges(window, x_step, y_step);
 process.show_img_shape;
 
-
 %% normalize along time axis, remove DC component, and apply hilbert
 
 process      = process.normalize_timeAxis_removeslope_hilbert;
 % process      = process.removeslope_hilbert;
+
+
+%% gausswin2XY
+
+img_temp = process.img_hil;
+Nx       = 5;
+Ny       = 5; 
+alph_f   = 1; 
+y        = gausswin2XY(Nx, Ny, alph_f); 
+for i = 1: size(img_temp, 3)
+    img_temp(:, :, i) = conv2(img_temp(:, :, i), y, 'same');
+end
+
+process.img_hil = img_temp;
 
 %% ***********
 FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\AGH_data\";   % the destination folder
@@ -129,7 +142,11 @@ zrange       = [1 650];
 drop         = 3; % dB
 sigma        = 1;
 process = process.amplitude_rise_3D_spatialfilter(PropertyName, zrange, drop, sigma);
+
 process.show_surfaces(filename_fig(1:end-5));
+
+flag = 1; % using depth property % flag==1: using front and back surface to calculate
+process.damage_depth_imaging(flag);
 
 % process = process.rear_filter;
 
@@ -228,6 +245,84 @@ figure, imagesc(temp_2D);
 
 %% movie show
 
+%% check 2 times fft
+close all;
+
+temp_img = real(process.img_hil);
+temp     = temp_img(100, 60, :);
+temp     = squeeze(temp);
+Fs       = process.fs;
+% 
+% L           = length(temp);
+% DynamicGate = exp((1:L)/L);
+% temp        = temp .* DynamicGate.';
+
+figure,
+plot((1:length(temp))/Fs, temp, 'LineWidth', 2);
+
+L        = length(temp);
+n        = 2^nextpow2(L);
+temp_fft = fft(temp, n)/L;
+figure, 
+plot(Fs*(0:(n/2))/n, abs(temp_fft(1:n/2+1)), 'LineWidth', 2);
+figure,
+% plot(Fs*(0:(n/2))/n, angle(temp_fft(1:n/2+1)), 'LineWidth', 2);
+% figure,
+
+temp_fft2_signal = fft(abs(temp_fft(1:n/2)));
+plot(abs(temp_fft2_signal), 'LineWidth', 2);
+
+% reference signal
+A_scan_Ave    = squeeze(mean(temp_img(1:5,1:5,1:end/1.3), [1, 2]));
+A_scan_Ave    = real(A_scan_Ave);
+L             = length(A_scan_Ave);
+nfft          = 2^nextpow2(L);
+temp_fft      = fft(A_scan_Ave, nfft*2^2)/L;
+temp_fft2     = fft(abs(temp_fft(1:end/2)));
+temp_fft2     = temp_fft2(1:end/2);
+temp_fft2_ave = abs(temp_fft2);
+
+figure,
+plot((1:length(A_scan_Ave))/Fs, A_scan_Ave, 'LineWidth', 2);
+
+L        = length(A_scan_Ave);
+n        = 2^nextpow2(L);
+temp_fft = fft(A_scan_Ave, n)/L;
+figure, 
+plot(Fs*(0:(n/2))/n, abs(temp_fft(1:n/2+1)), 'LineWidth', 2);
+figure,
+% plot(Fs*(0:(n/2))/n, angle(temp_fft(1:n/2+1)), 'LineWidth', 2);
+% figure,
+
+plot(temp_fft2_ave, 'LineWidth', 2);
+
+% substract
+figure,
+plot(abs(temp_fft2_signal)/max(abs(temp_fft2_signal)) ...
+    - abs(temp_fft2_ave)/max(abs(temp_fft2_ave)), 'LineWidth', 2);
+
+%% 2 times fft determining the depth and imaging
+close all;
+PropertyName = 'img_hil';
+
+max_len       = 650;
+delay         = 45;
+filter_flag   = 1;
+bwr           = -3; % dB
+sampling_rate = 1;
+
+process.find_surface_2fft_imaging_diff(PropertyName, max_len, filter_flag, bwr, sampling_rate);
+process.find_surface_2fft_imaging_reference(PropertyName, max_len, filter_flag, bwr, sampling_rate);
+process.find_surface_2fft_imaging_window(PropertyName, max_len, delay, filter_flag, bwr, sampling_rate);
+
+%% normal time window
+PropertyName = 'img_hil';
+% PropertyName = 'img_hil_filter';
+delay        = 45;
+max_len      = 650;
+flag         = 0;
+front_I_max  = 100;
+process.find_damage_timewin(PropertyName, max_len, flag, delay, front_I_max);
 
 %% ***********
 FolderName = "F:\Xiayang\results\image_processing\";   % the destination folder

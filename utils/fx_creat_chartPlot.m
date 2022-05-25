@@ -46,8 +46,8 @@ for iMap = 1:length(maps)
         'FontName', 'Times New Romans');
     set(gca, 'Fontname', 'times new Roman', 'FontSize', 12);
     set(gca, 'linewidth', 2);
-    line([0 0]+22 + 90 + Stacking_sequence(iMap), ...
-        [offset offset+offset_para-2], 'color', 'red', 'linewidth', 1);
+%     line([0 0]+22 + 90 + Stacking_sequence(iMap), ...
+%         [offset offset+offset_para-2], 'color', 'red', 'linewidth', 1);
 end
 axis equal off
 % title('Built-in Colormaps')

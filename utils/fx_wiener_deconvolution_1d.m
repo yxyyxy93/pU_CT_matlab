@@ -11,7 +11,8 @@ H = fft(kernel) / 1; % shrink the kernel
 Y_omega  = fft(ori_signal);
 % This constant is sometimes called the ‘‘noise desensitizing factor’’
 Q = sqrt(q_factor * max(H .* conj(H)).^2);
-devolved = real(ifft(Y_omega .* conj(H) ./ (H .* conj(H) + Q.^2)));
+devolved = ifft(Y_omega .* conj(H) ./ (H .* conj(H) + Q.^2));
+% devolved = real(ifft(Y_omega .* conj(H) ./ (H .* conj(H) + Q.^2)));
 % devolved = real(ifft(fft(ori_signal) ./ (H);
 devolved = circshift(devolved, shift);
 

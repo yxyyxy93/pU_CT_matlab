@@ -13,12 +13,17 @@ clear;
 filename               = strcat(Pathname1, Filename1);
 process3               = class_process_wrinkling_RFdata(filename);
 
-% read the settings
-[Filename1, Pathname1] = uigetfile({'*.xlsx'}, 'select the file');
-settinig_file          = strcat(Pathname1, Filename1);
+% input the settings 
+process3.fs = 250e6; % MHz
+process3.fx = 1 / 0.2e-3; % unit: 1 / m
+process3.fy = 1 / 0.2e-3; % unit: 1 / m
+
+% % read the settings
+% [Filename1, Pathname1] = uigetfile({'*.xlsx'}, 'select the file');
+% settinig_file          = strcat(Pathname1, Filename1);
+% process3               = process3.loadSettings(settinig_file);
 
 % read the data from the struct, or reset the dataset
-process3               = process3.loadSettings(settinig_file);
 process3               = process3.read_origin_data; % read (reset) the dataset
 
 x                      = 10;
@@ -29,7 +34,6 @@ y                      = 10;
 
 x_step   = 1;
 y_step   = 1;
-window   = [100 400 1 350 1 1500];
 window   = [1 250 1 550 100 1300];
 % x_step   = 1;
 % y_step   = 1;
@@ -40,42 +44,98 @@ process3.show_img_shape;
 % shift the A scan in the time domain
 process3 = process3.shift_A_scan(0);
 
-%% surface calculation
-% x: x index
-% y: y index
-% MinPD: MinPeakDistance for findpeaks
-% MinPH: MinPeakHeight for findpeaks
-MinPD        = 500;
-MinPH        = 0.05;  % these 2 parameters need to be changed for surface estimation.
+
+%% read reference signal
+[Filename1, Pathname1] = uigetfile({'*.tdms'},  'select the file');   
+filename               = strcat(Pathname1, Filename1);
+x                      = 10;
+y                      = 10;
+process3               = process3.read_refer(filename, x, y);
+
+% cut the ref. signal
+win                    = [0.1e-6 2e-6]; % unit: s
+process3               = process3.cut_reference_signal(win);
+
+% calculate the SNR
+win_noise              = [0.1e-6 0.5e-6];
+win_signal             = [0.6e-6 1e-6]; % unit: s
+snr                    = process3.calculate_SNR(win_signal, win_noise);
+
+% align the signal
+process3               = process3.align_refer_ascan(x, y); 
+
+%% deconvolution
+x           = 100;
+y           = 100;
+q_factor    = 1e-2;
+q_factor_AR = 1e-2;
+fft_padding = 2^11;
+f1          = 8e6;
+f2          = 19e6;
+bw          = [f1 f2];
+bwr         = -3:-1:-10;
+k           = 45;
+lam         = 0.01;
+ker_wid     = 200;
+Nit         = 45;
+DownRate    = 1;
+fig_subname = '2-CEH105-24-p4_15MHz';
+process3.demo_deconvolutions(x, y, q_factor, q_factor_AR, ...
+    fft_padding, bw, bwr, k, lam, ker_wid, DownRate, Nit, fig_subname);
+
+% demo B scan
+B_type      = 'x'; % scaning direction 'y'
+index       = 50;
+Bwin        = 1:100;
+% process = process.deconv_ARextrapolation(Bwin, B_type, index, q_factor_AR, fft_padding, bw, bwr, k, ker_wid, fig_subname);
+
+% process.demo_deconvolutions(x, y, q_factor, q_factor_AR, fft_padding, bw, k, lam, ker_wid, DownRate, Nit, fig_subname);
+% 
+process3     = process3.apply_deconvolutions_Bscan(Bwin, B_type, index, q_factor, q_factor_AR, fft_padding, bw, bwr, k, lam, ker_wid, DownRate, Nit);
+
+process3.demo_deconvolutions_Bscans(B_type, index, Bwin, fig_subname);
+
+%%
+% process2      = process2.apply_deconvolutions(q_factor, ...
+%     q_factor_AR, fft_padding, bw, bwr, k, ker_wid);
+process3      = process3.apply_deconvolutions_onlyWiener(q_factor, ker_wid);
+
+% save('process2.mat','process2');
+
+%% show A scan
+% define the index to select Ascan 
+x = 45;
+y = 369;
+% process3.demo_AS_3D_inclinfq(x, y);
+
+process3.show_hilbert_Ascan(x, y);
+
+%% surface search one signal
+global min_pks 
+min_pks      = 0.03;
 PropertyName = 'img_hil';
-process3.show_Ascan_inam_peaks(20, 20, MinPD, MinPH, PropertyName); % x, y
-process3.show_Ascan_inam_peaks(40, 40, MinPD, MinPH, PropertyName); % x, y
+% process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
+clc;
+close all;
 
-alpha        = 3e-3;
-A_ratio      = 0.5;
-max_len      = 1300;
-process3     = process3.find_front_amp_alpha(MinPD, MinPH, PropertyName, max_len, alpha, A_ratio);
-% process3     = process3.find_front_amp(MinPD, MinPH, PropertyName, max_len, 0.5);
+MinPD   = 100;
+MinPW   = 13;  % these 2 parameters need to be changed for surface estimation.
+% surface calculation
+max_len = 800;
+alpha   = 7e-3;
+A_ratio = 0.4;
+
+x = 63;
+y = 234;
+process3.find_front_amp_alpha_Ascan(MinPD, MinPW, PropertyName, max_len, alpha, A_ratio, x, y);
+
+%% surface search all signals
+% A_ratio      = 0.4; % for 0.3 m drop
+process3     = process3.find_front_amp_alpha(MinPD, MinPW, PropertyName, max_len, alpha, A_ratio);
 filename_fig = filename;
+close all;
+
 process3.show_surfaces(filename_fig(1:end-5));
-
-% % surface calculation
-% max_len      = 1500;
-% threshold_d  = 1;
-% process3     = process3.find_front_amp(MinPD, MinPH, PropertyName, max_len, threshold_d);
-% filename_fig = filename;
-% process3.show_surfaces(filename_fig(1:end-5));
-
-process3     = process3.recover_surface;
-process3     = process3.smooth_rear_I;
-process3.show_surfaces(filename_fig(1:end-5));
-
-% tackle the problem of walls determination
-TOF_walls    = -mean(process3.front_I-process3.rear_I, 'all', 'omitnan');
-% process3.rear_I = process3.front_I + mean(TOF_walls);
-% process3.show_surfaces;
-% % shift the A scan in the time domain
-% process3        = process3.shift_A_scan(200);
 
 %% original results display
 xslice = 50 / process3.fx * 1e3;
@@ -89,21 +149,21 @@ process3.show_hilbert_Ascan(100, 100);
 %% internal damage features
 process3.damage_imaging;
 %
-xslice = 175 ;
-yslice = 175 ;
+xslice = 67 ;
+yslice = 454 ;
 process3.show_front_position(xslice, yslice);
 
 %% log-gabor filter
 % filtered
-f0        = 7.5e6;
+f0        = 11e6;
 sigma     = 0.7;
 process3 = process3.Filter_logGabor(f0, sigma, 'img');
 
-% low-pass filter
-process3 = process3.Filter_lowpass(10e6, 'img_hil');
+% % low-pass filter
+% process3 = process3.Filter_lowpass(10e6, 'img_hil');
 
 fx_Scrollable_3d_view(angle(process3.img_hil_filter));
-fx_Scrollable_3d_view(abs(process3.img_hil));
+% fx_Scrollable_3d_view(abs(process3.img_hil));
 
 %% 3d ply track
 % add noise to img.
@@ -187,8 +247,8 @@ save TOF.mat TOF_walls;
 %% structrul tensor 
 % out-of-plane angles
 
-f0_1     = 6.5e6;
-sigma0_1 = 0.8;
+f0_1     = 10e6;
+sigma0_1 = 0.7;
 process3 = process3.Filter_logGabor(f0_1, sigma0_1, 'img');
 
 % smoothing scale
@@ -200,16 +260,16 @@ PropertyName = 'img_hil_filter';
 process3     = process3.structural_tensor(sigma1, sigma2, PropertyName, ds_rate);
 
 % display the angles 3d slices
-medf_kernel  = [3, 3, 3];
-xslice       = 178 / process3.fx * 1e3;
-yslice       = 172 / process3.fx * 1e3;
+medf_kernel  = [1, 1, 1];
+xslice       = 60 / process3.fx * 1e3;
+yslice       = 65 / process3.fy * 1e3;
 zslice       = [];
 process3.show_angles_ST_zangle(medf_kernel, xslice, yslice, zslice, ds_rate);
 %
 B_type     = 'x';
 index      = 50;
 % Bwin       = 1:750;
-Bwin       = 1:97;
+Bwin       = 50:800;
 process3.show_angles_ST_Bscan(B_type, index, Bwin);
 %
 B_type     = 'y';
@@ -220,8 +280,10 @@ process3.show_angles_ST_Bscan(B_type, index, Bwin);
 
 %% video of out-of-plane angles
 B_type       = 'x';
-Bwin         = 1:480;
-process3.makeMovie_angles_ST_Bscan(B_type, Bwin);
+Bwin         = 1:850;
+propertyname = 'angle_z'; 
+process3.makeMovie_angles_ST_Bscan(B_type, Bwin, propertyname);
+
 
 %% ***********
 FolderName = "F:\Xiayang\results\Woven_samples\";   % the destination folder

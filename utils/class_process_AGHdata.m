@@ -623,16 +623,16 @@ classdef class_process_AGHdata < class_process_RFdata
                 [xx, yy] = meshgrid(-radii+1:radii, -radii+1:radii);
                 mask     = (hypot(xx, yy)<=radii);
                 fft2D_shifted = fft2D_shifted .* mask;
-                %  *****　linear gaussian filter
-                alpha = 30;
-                w = gausswin(nfftx, alpha);
-                w_2d =  repmat(w, 1, nffty);
-                %　rotate
-                angle = 135;
-                w_2d_rot = imrotate(w_2d, angle, 'bilinear','crop');
-                % fliter
-                fft2D_shifted = fft2D_shifted.*(1-w_2d_rot);
-                % **************
+%                 %  *****　linear gaussian filter
+%                 alpha = 30;
+%                 w = gausswin(nfftx, alpha);
+%                 w_2d =  repmat(w, 1, nffty);
+%                 %　rotate
+%                 angle = 135;
+%                 w_2d_rot = imrotate(w_2d, angle, 'bilinear','crop');
+%                 % fliter
+%                 fft2D_shifted = fft2D_shifted.*(1-w_2d_rot);
+%                 % **************
                 [R,~] = radon(abs(fft2D_shifted), theta);
                 % *************
                 %                 % Display the transform.

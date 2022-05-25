@@ -25,6 +25,7 @@ classdef class_process_RFdata
         rear_I_pre % without extra fillnan and smooth
         rear_I_virtual % the vitual rear surface: ignoring the
         mask_wrong_front % a mask the same size as front_I to record the wrong front_I; 1: wrong
+        depth_2D
         % structural tensor
         c_p % the planar anisotropy metrics
         angle_x %  acos(eigenvector(1)) - pi/2;
@@ -87,6 +88,7 @@ classdef class_process_RFdata
         Curvelet_ID
         Curvelet_Coef
         % info of in-plane orientation extraction
+        mono_img
         radius_RT
         theta_RT
         distances_to_front_RT
@@ -206,13 +208,10 @@ classdef class_process_RFdata
             [m, n, z]    = size(img_temp);
             for i = 1:m
                 for j = 1:n
-                    img_temp(i, j, :)     = squeeze(img_temp(i, j, :))...
-                        .* linspace(1, z*ratio, z);
                     img_hil_temp(i, j, :) = squeeze(img_hil_temp(i, j, :))...
-                        .* linspace(1, z*ratio, z);
+                        .* exp((1:z)/ ratio).';
                 end
             end
-            obj.img     = img_temp;
             obj.img_hil = img_hil_temp;
         end
         
@@ -336,6 +335,23 @@ classdef class_process_RFdata
                 for j = 1:ly
                     img_noiseadded(i, j, :) =  awgn(obj.img_hil(i, j, :), snr, 'measured');
                 end
+                clc;
+                disp([num2str(i) '/' num2str(lx)]);
+            end
+            obj.img_hil_noise =  img_noiseadded;
+        end
+        
+        function obj = addnoise_bydBW(obj, dBW)
+            % add noise on the origin signal
+            % dBW: dBW of the added noise
+            % seed: seed for wgn
+            [lx, ly, lz] = size(obj.img_hil);
+            img_noiseadded = zeros(lx, ly, lz);
+            for i = 1:lx
+                ascan                 = squeeze(obj.img_hil(i, :, :));
+                img_noiseadded(i,:,:) = ascan + wgn(ly, lz, dBW, 1);  
+                clc;
+                disp([num2str(i) '/' num2str(lx)]);
             end
             obj.img_hil_noise =  img_noiseadded;
         end
@@ -669,6 +685,183 @@ classdef class_process_RFdata
             set(gca, 'linewidth', 2);
         end
         
+        function show_Ascan_addnoise(obj, x, y, noises_dbm, seed)
+            % display the decomposed analytical signal of A scan
+            % x, y: index of the A scan
+            % reuse the fx_showAS
+            ascan  = squeeze(obj.img(x, y, :));
+            ascans = nan(length(ascan), length(noises_dbm));
+            for i = 1:length(noises_dbm)
+                ascans(:, i) = ascan + wgn(length(ascans), 1, noises_dbm(i), 1, seed);
+%                 ascans(:, i) = ascan + sqrt(10^(noises_dbm(i)/10))*randn(length(ascan), 1);
+            end
+            t = (1:length(ascan))/obj.fs * 1e6; % us
+            figure('Name', strcat('Ascan_x', num2str(x), '_y', num2str(y), 'noises', num2str(noises_dbm(1))));
+            ca = subplot(length(noises_dbm)+1, 1, 1);
+            plot(t, ascan, 'k-', 'Linewidth', 2);
+            hold on;
+            plot(t, abs(hilbert(ascan)), 'b-', 'Linewidth', 2);
+            title('No added noise', 'FontSize', 16, 'FontName', 'times new roman');
+            ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+            set(ca, 'fontsize', 16);
+            set(ca, 'linewidth', 2);
+            xlim([t(1) t(end)]);
+            for i = 1:length(noises_dbm)
+                ca = subplot(length(noises_dbm)+1, 1, i+1);
+                plot(t, ascans(:, i), 'k-', 'Linewidth', 2);
+                hold on;
+                plot(t, abs(hilbert(ascans(:, i))), 'b-', 'Linewidth', 2);
+                title(strcat('Added noise = ', num2str(noises_dbm(i)), ' dBW'), 'FontSize', 16, 'FontName', 'times new roman');
+                ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+                set(ca, 'fontsize', 16);
+                set(ca, 'linewidth', 2);
+                xlim([t(1) t(end)]);
+            end
+            xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16); % last row x label
+        end
+        
+        function show_Ascan_resample(obj, x, y, samling_rates)
+            % display the resampled signal of A scan
+            % x, y: index of the A scan
+            % reuse the fx_showAS
+            ascan  = squeeze(obj.img(x, y, :));
+            L      = length(ascan);
+            L      = 2^nextpow2(L);
+            t      = (1:length(ascan))/obj.fs * 1e6; % us
+            cf1    = figure('Name', strcat('Ascan_x', num2str(x), '_y', num2str(y), 'resample_rate', num2str(samling_rates(1))));
+            cf2    = figure('Name', strcat('fft_x', num2str(x), '_y', num2str(y), 'resample_rate', num2str(samling_rates(1))));
+            cf3    = figure('Name', strcat('fft2_x', num2str(x), '_y', num2str(y), 'resample_rate', num2str(samling_rates(1))));
+            %             ca = subplot(length(samling_rates)+1, 1, 1);
+            %             plot(t, ascan, 'k-', 'Linewidth', 2);
+            figure(cf1);
+            plot(t, ascan);
+            hold on;
+%             title(strcat('Sampling rate = ', num2str(obj.fs/1e6), ' MHz'), 'FontSize', 16, 'FontName', 'times new roman');
+%             ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+%             set(ca, 'fontsize', 16);
+%             set(ca, 'linewidth', 2);
+%             xlim([t(1) t(end)]);
+            for i = 1:length(samling_rates)
+                figure(cf1);
+                % ca       = subplot(length(samling_rates)+1, 1, i+1);
+                rate     = samling_rates(i);
+                Fs_red   = obj.fs/rate;
+                t_ds     = t(1:rate:end);
+                ascan_ds = ascan(1:rate:end);
+                % plot(t_ds, ascan_ds, 'k-', 'Linewidth', 2);
+                plot(t_ds, ascan_ds);
+                hold on;
+                %                 title(strcat('Sampling rate = ', num2str(obj.fs/rate/1e6), ' MHz'), 'FontSize', 16, 'FontName', 'times new roman');
+                %                 ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+                %                 set(ca, 'fontsize', 16);
+                %                 set(ca, 'linewidth', 2);
+                %                 xlim([t(1) t(end)]);
+                figure(cf2);
+%                 ascan_ds  = cat(1, ascan_ds, zeros(L-length(ascan_ds), 1));
+                ascan_fft = abs(fft(ascan_ds));
+                f_red     = Fs_red/L*rate:Fs_red/L*rate:Fs_red/2;
+                f_lo      = find(f_red<=0.5e6, 1, 'last' );f_up = find(f_red>=10e6, 1);
+                ascan_fft = cat(1, ascan_fft(f_lo:f_up),zeros(L/2-(f_up-f_lo+1), 1));
+                %
+                plot(ascan_fft);
+                hold on;
+%                 ascan_fft = cat(1, ascan_fft(1:end/2), zeros(L-length(ascan_fft), 1));
+                ascan_fft2 = abs(fft(ascan_fft));
+                ascan_fft2 = ascan_fft2/max(ascan_fft2);
+                figure(cf3);
+                plot(ascan_fft2)
+                hold on;
+            end
+            xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16); % last row x label
+        end
+        
+        function show_Ascan_freqManipulation(obj, x, y, Fcs)
+            % display the resampled signal of A scan
+            % x, y: index of the A scan
+            % reuse the fx_showAS
+            ascan       = squeeze(obj.img(x, y, :));
+            t           = (1:length(ascan))/obj.fs * 1e6; % us
+            refer_ascan = obj.refer_Ascan_aligned;
+            l           = length(refer_ascan);
+            refer_ascan_abs  = abs(hilbert(refer_ascan));
+            [~, shift_mid_I] = max(refer_ascan_abs);
+            refer_ascan      = circshift(refer_ascan, round(l/2)-shift_mid_I);
+            ascans           = nan(length(ascan), length(Fcs));
+            for i = 1:length(Fcs)
+                Fc      = Fcs(i);
+                bw      = 0.6;
+                [yp, ~, ~] = gauspuls((-l/2+1:l/2)/obj.fs, Fc, bw);
+                ascans(:, i) = ifft(fft(ascan)./fft(refer_ascan, length(ascan)).*fft(yp.', length(ascan)));
+            end
+            figure('Name', strcat('Ascan_x', num2str(x), '_y', num2str(y), 'resample_rate', num2str(Fcs(1))));
+            ca = subplot(length(Fcs)+1, 1, 1);
+            plot(t, ascan, 'k-', 'Linewidth', 2);
+            title(strcat('Center frequency = ', ' 5 MHz'), 'FontSize', 16, 'FontName', 'times new roman');
+            ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+            set(ca, 'fontsize', 16);
+            set(ca, 'linewidth', 2);
+            xlim([t(1) t(end)]);
+            for i = 1:length(Fcs)
+                ca    = subplot(length(Fcs)+1, 1, i+1);
+                ascan = ascans(:, i);
+                plot(t, ascan, 'k-', 'Linewidth', 2);
+                title(strcat('Center frequency = ', num2str(Fcs(i)/1e6), ' MHz'), 'FontSize', 16, 'FontName', 'times new roman');
+                ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+                set(ca, 'fontsize', 16);
+                set(ca, 'linewidth', 2);
+                xlim([t(1) t(end)]);
+            end
+            xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16); % last row x label
+        end
+        
+        function obj = data_downsample(obj, rate)
+            % downsample the origin signal
+            % rate: downsample rate
+           img_noiseadded = obj.img_hil;
+           img_noiseadded = img_noiseadded(:,:,1:rate:end);
+%             [lx, ly, lz] = size(obj.img_hil);
+%             img_noiseadded = zeros(lx, ly, round(lz/rate));
+%             for i = 1:lx
+%                 for j = 1:ly
+%                     ascan = downsample(obj.img_hil(i, j, :), round(rate));
+%                     img_noiseadded(i, j, 1:length(ascan)) = ascan;
+%                 end
+%                 clc;
+%                 disp([num2str(i) '/' num2str(lx)]);
+%             end
+            obj.img_hil_noise =  img_noiseadded;
+        end
+        
+        function obj = data_freqManipulation(obj, Fc)
+            % manipulate the frequency
+            % rate: downsample rate
+            [lx, ly, lz]   = size(obj.img_hil);
+%             img_noiseadded = zeros(lx, ly, lz);
+            % reference signal and generate new Gaussian pulse
+            refer_ascan      = obj.refer_Ascan_aligned;
+            l                = length(refer_ascan);
+            refer_ascan_abs  = abs(hilbert(refer_ascan));
+            [~, shift_mid_I] = max(refer_ascan_abs);
+            refer_ascan      = circshift(refer_ascan, round(l/2-shift_mid_I));
+            bw               = 0.4;
+            [yq, ~]          = gauspuls((-l/2+1:l/2)/obj.fs, Fc, bw);
+            img_noiseadded   = fft(obj.img_hil, [], 3);
+            % 
+            refer_ascan_fft  = fft(refer_ascan, lz);
+            refer_pulse      = fft(yq.', lz);
+            img_noiseadded   = bsxfun(@rdivide, img_noiseadded, permute(refer_ascan_fft./refer_pulse, [2, 3, 1]));
+            img_noiseadded   = ifft(img_noiseadded, [], 3);          
+%             for i = 1:lx
+%                 for j = 1:ly
+%                     ascan                   = squeeze(obj.img_hil(i, j, :));
+%                     img_noiseadded(i, j, :) = ifft(fft(ascan)./fft(refer_ascan, length(ascan)).*fft(yq.', length(ascan)));
+%                 end
+%                 clc;
+%                 disp([num2str(i) '/' num2str(lx)]);
+%             end
+            obj.img_hil_noise =  img_noiseadded;
+        end
+        
         % ***************** surface determination ****************
         function [A, A0, z] = statistic_front_backechoes(obj, window)
             % window: the window selected for computation
@@ -798,7 +991,8 @@ classdef class_process_RFdata
             for i = 1:size(inam, 1)
                 for j = 1:size(inam, 2)
                     A_inam            = squeeze(inam(i, j, 1:max_len));
-                    [pks, locs, ~, ~] = findpeaks(A_inam, t, 'MinPeakDistance', MinPD, 'MinPeakHeight', MinPH);
+                    [pks, locs, ~, ~] = findpeaks(A_inam, t, ...
+                        'MinPeakDistance', MinPD, 'MinPeakHeight', MinPH);
                     %                     % sort the peaks
                     %                     [~, I] = sort(pks);
                     % the front-wall echo is largest
@@ -813,14 +1007,15 @@ classdef class_process_RFdata
                             continue;
                         end
                         % remove the front-wall echo
-                        pks  = pks(loc_findex+1:end);
+                        pks  = pks(loc_findex+1:end); % the +num should be 1! the value larger than 1 help to remove nearby large echoes
                         locs = locs(loc_findex+1:end);
                         if isempty(locs)
                             continue;
                         end
-                        Af   = A_inam(front_I_temp(i, j));
                         % find the delamination by the attenuated threshold
+                        Af   = A_inam(front_I_temp(i, j));
                         pks_cmp = pks' - Af * A_ratio * exp(- alpha*(locs - front_I_temp(i, j)));
+                        %                         pks_cmp = pks' - A_ratio * exp(- alpha*(locs - front_I_temp(i, j)));
                         if find(pks_cmp>0, 1)
                             rear_I_temp(i, j) = locs(find(pks_cmp>0, 1));
                         else
@@ -842,7 +1037,71 @@ classdef class_process_RFdata
             obj.rear_I_pre  = rear_I_temp;
         end
         
-        function obj = find_front_amp_alpha_Ascan(obj,  MinPD, MinPH, PropertyName, max_len, alpha, A_ratio, x, y)
+        function obj = find_front_amp_alpha_maxfront(obj,  MinPD, MinPW, PropertyName, max_len, alpha, A_ratio)
+            % determining the front surface index by amp.
+            % obj.rear_i is also intially determined here
+            % define the delamination by the attenuated threshold!
+            % The sequence is changed unexpectedly. Transverse the matrix
+            % MinPD: MinPeakDistance for findpeaks
+            % MinPH: MinPeakHeight for findpeaks
+            % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
+            % max_len: the end point in the signal
+            % threshold_delamination: the threshold to determine the delaminiation
+            % Ab: the amplitude of the back-wall echo
+            % ****
+            % calculate the inam
+            % The sequence is changed unexpectedly. Transverse the matrix
+            global min_pks % set the minimus peak of the first echo
+            img_temp = obj.(PropertyName);
+            %             inph         = angle(obj.(PropertyName));
+            % the time domain
+            t            = (1:max_len);
+            [l, m, ~]    = size(img_temp);
+            front_I_temp = NaN(l, m);
+            rear_I_temp  = NaN(l, m);
+            %
+            for i = 2:l
+                for j = 1:m
+                    A_scan = squeeze(img_temp(i, j, 1:max_len));
+                    % define front surface
+                    A_scan_surface     = A_scan(1:500);
+                    [M,I]              = max(abs(A_scan_surface));
+                    front_I_temp(i, j) = I;
+                    A_inam             = abs(A_scan);
+                    [pks, locs, ~, ~]  = findpeaks(A_inam(I+1:end), t(I+1:end), 'MinPeakWidth', MinPW);
+                    %                     % sort the peaks
+                    %                     [~, I] = sort(pks);
+                    % the front-wall echo is largest
+                    if length(pks)>1
+                        if isempty(locs)
+                            continue;
+                        end
+                        % find the delamination by the attenuated threshold
+                        Af      = A_inam(I);
+                        pks_cmp = pks' - Af * A_ratio * exp(- alpha*(locs - I));
+                        %                         pks_cmp = pks' - A_ratio * exp(- alpha*(locs - front_I_temp(i, j)));
+                        if find(pks_cmp>0, 1)
+                            rear_I_temp(i, j) = locs(find(pks_cmp>0, 1)) + I;
+                        else
+                            rear_I_temp(i, j) = locs(end) + I;
+                        end
+                    elseif length(pks)==1
+                        front_I_temp(i, j) = locs(1) + I;
+                    else
+                        front_I_temp(i, j) = NaN;
+                    end
+                end
+                clc;
+                disp([num2str(i) '/' num2str(l)]);
+            end
+            front_I_temp    = fx_inpaint_nans(front_I_temp, 0);
+            obj.front_I     = front_I_temp;
+            obj.rear_I      = rear_I_temp;
+            obj.front_I_pre = front_I_temp;
+            obj.rear_I_pre  = rear_I_temp;
+        end
+        
+        function obj = find_front_amp_alpha_Ascan(obj, MinPD, MinPH, PropertyName, max_len, alpha, A_ratio, x, y)
             % determining the front surface index by amp.
             % obj.rear_i is also intially determined here
             % define the delamination by the attenuated threshold!
@@ -856,15 +1115,22 @@ classdef class_process_RFdata
             % ****
             % calculate the inam
             % The sequence is changed unexpectedly. Transverse the matrix
-            ascan        = obj.(PropertyName);
-            ascan        = squeeze(ascan(x, y, 1:max_len));
+            ascan = obj.(PropertyName);
+            ascan = squeeze(ascan(x, y, 1:max_len));
             % inph         = angle(obj.(PropertyName));
             % the time domain
-            t            = (1:max_len);
-            t_domain     = t / obj.fs*1e6;
+            t        = (1:max_len);
+            t_domain = t / obj.fs*1e6;
             %
-            A_inam            = abs(ascan);
-            [pks, locs, ~, ~] = findpeaks(A_inam, t, 'MinPeakDistance', MinPD, 'MinPeakHeight', MinPH);
+            A_inam   = abs(ascan);
+            %             if strcmp(PropertyName, 'img_hil') | strcmp(PropertyName, 'img_hil_filter')
+            %                 A_inam   = abs(ascan);
+            %             else
+            %                 A_inam   = abs(ascan);
+            %             end
+            % MinPeakWidth not fixed !
+            [pks, locs, ~, ~] = findpeaks(A_inam, t, ...
+                'MinPeakDistance', MinPD, 'MinPeakHeight', MinPH);
             %                     % sort the peaks
             %                     [~, I] = sort(pks);
             % the front-wall echo is largest
@@ -877,17 +1143,19 @@ classdef class_process_RFdata
                 front_I_temp  = locs(loc_findex);
             end
             % remove the front-wall echo
-            pks  = pks(loc_findex+1:end);
+            pks  = pks(loc_findex+1:end); % the +num should be 1! the value larger than 1 help to remove nearby large echoes
             locs = locs(loc_findex+1:end);
             Af   = A_inam(front_I_temp);
             % find the delamination by the attenuated threshold
             pks_cmp = pks' - Af * A_ratio * exp(-alpha*(locs - front_I_temp));
+            %             pks_cmp = pks' - A_ratio * exp(-alpha*(locs - front_I_temp));
             if find(pks_cmp>0, 1)
                 rear_I_temp = locs(find(pks_cmp>0, 1));
             elseif ~isempty(locs)
                 rear_I_temp = locs(end);
             end
             Gate = Af * A_ratio * exp(-alpha*(t - front_I_temp));
+            %             Gate = A_ratio * exp(-alpha*(t - front_I_temp));
             % plot in fig.
             cf = figure('Name', ['Ascan_', 'TimeGate_xy_', num2str(x), '_', num2str(y)]);
             set(cf, 'Position', [0, 0, 800, 300], 'color', 'white');
@@ -916,7 +1184,7 @@ classdef class_process_RFdata
             % modefilter applied!!
             obj.front_I_pre = obj.front_I;
             obj.rear_I_pre  = obj.rear_I;
-            smoothing_size  = 3;
+            smoothing_size  = 4;
             front_I_temp    = fx_inpaint_nans(obj.front_I, 5);
             front_I_temp    = padarray(front_I_temp, [smoothing_size smoothing_size], 'replicate');
             front_I_temp    = round(colfilt(front_I_temp, ...
@@ -1239,7 +1507,7 @@ classdef class_process_RFdata
             set(ax, 'linewidth', 1.5);
         end
         
-        function obj = find_surface_2fft(obj,  MinPD, MinPH, PropertyName, max_len)
+        function obj = find_surface_2fft(obj, PropertyName, max_len, flag, delay, filter_flag, passband)
             % determining the front surface index by 2 times fft
             % obj.rear_i is also intially determined here
             % define the delamination by the attenuated threshold!
@@ -1253,52 +1521,706 @@ classdef class_process_RFdata
             % ****
             % calculate the inam
             % The sequence is changed unexpectedly. Transverse the matrix
-            global min_pks % set the minimus peak of the first echo
-            img_temp  = obj.(PropertyName);
+            img_temp    = obj.(PropertyName);
             %             inph         = angle(obj.(PropertyName));
             % the time domain
-            t         = (1:max_len);
-            [m, n, ~] = size(img_temp);
-            front_I_temp = NaN(m, n);
-            rear_I_temp  = NaN(m, n);
+            %             t         = (1:max_len);
+            % ave
+            [m, n, ~]     = size(img_temp);
+            rear_I_temp   = NaN(m, n);
+            %             front_I_temp  = NaN(m, n);
             %
+            L = size(img_temp, 3);
+            L = 2^nextpow2(L); % zero padding for higher freq. resolution
+            %
+            A_scan_Ave    = squeeze(mean(img_temp(1:5,1:5,1:end/2), [1, 2]));
+            A_scan_Ave    = real(A_scan_Ave);
+            %             A_scan_Ave    = obj.refer_Ascan_aligned;
+            temp_fft      = fft(A_scan_Ave, L)/L;
+            temp_fft      = temp_fft(1:L/2+1);
+            if filter_flag
+                win_fil   = round(passband/obj.fs*L);
+                temp_fft2 = fft(abs(temp_fft(win_fil(1):win_fil(2))), length(temp_fft));
+            else
+                temp_fft2     = fft(abs(temp_fft));
+            end
+            temp_fft2     = temp_fft2(1:(L/2+1)/2+1);
+            temp_fft2_ave = abs(temp_fft2);
+            %             avefft2 =
             for i = 1:m
                 for j = 1:n
                     A_scan = real(squeeze(img_temp(i, j, 1:max_len)));
-%                     A_inam = abs(A_scan);
-%                     [pks, locs, ~, ~] = findpeaks(A_inam, t, 'MinPeakDistance', MinPD, 'MinPeakHeight', MinPH);
-%                     if find(pks>min_pks, 1, 'first')
-%                         % the first echo should be front
-%                         loc_findex         = find(pks>min_pks, 1, 'first');
-%                         front_I_temp(i, j) = locs(loc_findex);
-%                     end
-                    % 2 times fft
-                    temp_fft = fft(A_scan, 2^13);
-                    temp_fft2 = fft(abs(temp_fft));
-                    [M,I] = max(abs(temp_fft2(200:end/2)));
-                    rear_I_temp(i, j) = I;
-% %                     find peaks
-%                     [pks, locs, ~, ~] = findpeaks(abs(temp_fft2(40:end/2)), 40:length(temp_fft2)/2);
-%                     if ~isempty(pks)
-%                         [M,I] = max(pks);
-%                         rear_I_temp(i, j) = locs(I);
-%                     end
+                    if flag % apply dynamic gate
+                        DynamicGate = exp((1:length(A_scan))/length(A_scan)*1.5);
+                        A_scan      = A_scan .* DynamicGate.';
+                    end
+                    %                     2 times fft
+                    temp_fft = fft(A_scan, L);
+                    temp_fft = temp_fft(1:L/2+1);
+                    %
+                    if filter_flag
+                        temp_fft2_signal = fft(abs(temp_fft(win_fil(1):win_fil(2))), length(temp_fft));
+                    else
+                        temp_fft2_signal = fft(abs(temp_fft));
+                    end
+                    temp_fft2_signal = abs(temp_fft2_signal(1:floor(end/2)+1));
+                    
+                    temp_fft2_signal = temp_fft2_signal/max(temp_fft2_signal) - temp_fft2_ave/max(temp_fft2_ave);
+                    %                     if flag % apply dynamic gate
+                    %                         DynamicGate = exp((1:length(temp_fft2)/2)/300);
+                    %                         temp_fft2 = temp_fft2(1:end/2) .* DynamicGate.';
+                    %                     else
+                    %                         temp_fft2 = temp_fft2(1:end/2);
+                    %                     end
+                    %
+                    [M,I] = max(temp_fft2_signal(delay:end));
+                    rear_I_temp(i, j)  = 2*(I + delay);
+                    %                     [pks, locs, ~, ~]  = findpeaks(abs(temp_fft2_signal), 1:length(temp_fft2_signal), 'SortStr', 'descend');
+                    %                     rear_I_temp(i, j)  = 2*locs(1);
+                    %                     % for debug
+                    %                     if i==2 && j==149
+                    %                         figure,
+                    %                         plot(A_scan, 'LineWidth', 2);
+                    %                         figure,
+                    %                         plot(abs(temp_fft), 'LineWidth', 2);
+                    %                         figure,
+                    %                         plot(abs(temp_fft2_signal), 'LineWidth', 2);
+                    %                         figure,
+                    %                         plot(A_scan_Ave, 'LineWidth', 2);
+                    %                         figure,
+                    %                         plot(abs(temp_fft2_ave), 'LineWidth', 2);
+                    %                         % substract
+                    %                         figure,
+                    %                         plot(abs(temp_fft2_signal)/max(abs(temp_fft2_signal)) ...
+                    %                             - abs(temp_fft2_ave)/max(abs(temp_fft2_ave)), 'LineWidth', 2);
+                    %                     end
+                    %                     % define front surface
+                    %                     A_scan_surface     = A_scan(1:600);
+                    %                     [M,I]              = max(A_scan_surface);
+                    %                     front_I_temp(i, j) = I;
+                end
+                clc;
+                disp([num2str(i) '/' num2str(m)]);
+            end
+            %             obj.front_I = front_I_temp;
+            front_I_temp = obj.front_I;
+            obj.rear_I   = front_I_temp + rear_I_temp;
+            %             obj.depth_2D = rear_I_temp;
+        end
+        
+        function obj = find_damage_timewin(obj, PropertyName, max_len, flag, delay, front_I_max, sampling_rate)
+            % determining the depth image by time domain method
+            % define the delamination by the attenuated threshold!
+            % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
+            % max_len: the end point in the signal
+            % flag: wheter to show a ascan demo
+            % ****
+            % calculate the inam
+            % The sequence is changed unexpectedly. Transverse the matrix
+            img_temp    = obj.(PropertyName);
+            if strcmp(PropertyName, 'img_hil')
+                sampling_rate = 1; % not downsampling
+            end
+            %             inph         = angle(obj.(PropertyName));
+            % the time domain
+            %             t         = (1:max_len);
+            % ave
+            [m, n, l]    = size(img_temp);
+            img_temp_fft = fft(img_temp, [], 3);
+            img_temp_fft = cat(3, img_temp_fft(:,:,1:end/2), zeros(m, n, l*sampling_rate-l/2));
+%             img_temp_fft  = cat(3, img_temp_fft(:,:,1:end/2), zeros(m, n, 1500-l/2));
+            img_temp     = abs(ifft(img_temp_fft, [], 3, 'nonsymmetric'));
+            map_depth    = nan(m, n);
+            map_amp      = nan(m, n);
+            %             [~, front_II] = max(img_temp(:,:, 1:front_I_max), [], 3);
+            %             front_I_ave   = mean(front_II, 'all');
+%             max_len     = max_len/sampling_rate;
+%             delay       = delay/sampling_rate;
+%             front_I_max = front_I_max/sampling_rate;
+            for i = 1:m
+                for j = 1:n
+                    A_scan          = squeeze(img_temp(i, j, 1:min(end,max_len)));
+                    [~, front_II]   = max(A_scan(1:round(front_I_max)));
+                    [M,I]           = max(A_scan(round(front_II+delay): end));
+%                     [M,I]           = max(A_scan(round(front_I_ave+delay): end));
+                    map_amp(i, j)   = M;
+                    map_depth(i, j) = I + delay;
+                    % for debug
+                    if flag == 1 && i==160 && j==60
+                        figure,
+                        plot(A_scan, 'LineWidth', 2);
+                    end
+                end
+                clc;
+                disp([num2str(i) '/' num2str(m)]);
+            end
+            % imaging
+            Y      = (1:m) / obj.fy * 1e3;
+            X      = (1:n) / obj.fx * 1e3;
+            % depth
+            cf = figure('Name', 'Internal_damage_TOF');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            h = imagesc(X, Y, map_depth/obj.fs/2 * 3000 * 1e3);
+            set(h, 'AlphaData', 1-isnan(map_depth))
+            hold on; colormap jet;
+            h = colorbar;
+            caxis([0 6]);
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+%             % amplitude
+%             cf = figure('Name', 'Internal_damage_TOF');
+%             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+%             h = imagesc(X, Y, map_amp);
+%             set(h, 'AlphaData', 1-isnan(map_amp))
+%             hold on; colormap jet;
+%             h = colorbar;
+%             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+%             set(gca, 'fontsize', 16);
+%             set(gca, 'linewidth', 1.5);
+%             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+%             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+        end
+        
+        function obj = find_damage_timewin_asignsurface(obj, PropertyName, max_len, flag, delay, front_I_max, sampling_rate)
+            % determining the depth image by time domain method
+            % define the delamination by the attenuated threshold!
+            % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
+            % max_len: the end point in the signal
+            % flag: wheter to show a ascan demo
+            % ****
+            % calculate the inam
+            % The sequence is changed unexpectedly. Transverse the matrix
+            img_temp    = abs(obj.(PropertyName));
+            %             inph         = angle(obj.(PropertyName));
+            % the time domain
+            %             t         = (1:max_len);
+            % ave
+            [m, n, ~]   = size(img_temp);
+            front_I_temp = NaN(m, n);
+            rear_I_temp  = NaN(m, n);
+            for i = 1:m
+                for j = 1:n
+                    A_scan        = squeeze(img_temp(i, j, 1:max_len));
+                    [~, front_II] = max(A_scan(1:round(front_I_max)));
+                    front_I_temp(i,j) = front_II;
+                end
+            end
+            front_I_ave = mean(front_I_temp, 'all');
+            for i = 1:m
+                for j = 1:n
+                    A_scan            = squeeze(img_temp(i, j, 1:max_len));
+                    %                     [~, front_II]   = max(A_scan(1:round(front_I_max)));
+                    [~,I]             = max(A_scan(round(front_I_ave+delay): end));
+                    rear_I_temp(i, j) = I + delay + front_I_ave;
+                    % for debug
+                    if flag == 1 && i==171 && j==224
+                        figure,
+                        plot(A_scan, 'LineWidth', 2);
+                        figure,
+                        plot((1:length(temp_fft2_signal))/obj.fs, temp_fft2_signal, 'LineWidth', 2);
+                        hold on;
+                        xlabel('\fontname {times new roman} Time (s) ', 'fontsize', 16);
+                        ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+                        set(gca, 'fontsize', 16);
+                        set(gca, 'fontname', 'Times new roman');
+                        set(gca, 'linewidth', 1.5);
+                        figure,
+                        plot(A_scan_Ave, 'LineWidth', 2);
+                    end
                 end
                 clc;
                 disp([num2str(i) '/' num2str(m)]);
             end
             obj.front_I     = front_I_temp;
             obj.rear_I      = rear_I_temp;
-            obj.front_I_pre = front_I_temp;
-            obj.rear_I_pre  = rear_I_temp;
         end
         
-        % ************** internal damage features imaging
+        function obj = find_surface_cepstrum(obj, PropertyName, max_len, flag, delay, f_win)
+            % determining the front surface index by cepstrum
+            % ****
+            % calculate the inam
+            % The sequence is changed unexpectedly. Transverse the matrix
+            img_temp  = obj.(PropertyName);
+            %             inph         = angle(obj.(PropertyName));
+            % the time domain
+            %             t         = (1:max_len);
+            [m, n, ~] = size(img_temp);
+            rear_I_temp  = NaN(m, n);
+            %
+            for i = 2:m
+                for j = 1:n
+                    A_scan = real(squeeze(img_temp(i, j, 1:max_len)));
+                    L      = length(A_scan);
+                    % 2 times fft
+                    L         = length(A_scan);
+                    nfft      = 2^nextpow2(L);
+                    temp_fft  = fft(A_scan, nfft)/L;
+                    %
+                    temp_fft2 = fft(log10(abs(temp_fft(f_win))));
+                    %                     figure,
+                    %                     plot(abs(temp_fft2).^2, 'LineWidth', 2);
+                    %                     if flag % apply dynamic gate
+                    %                         DynamicGate = exp((1:length(temp_fft2)/2)/500);
+                    %                         temp_fft2 = temp_fft2(1:end/2) .* DynamicGate.';
+                    %                     else
+                    %                         temp_fft2 = temp_fft2(1:end/2);
+                    %                     end
+                    [M,I] = min(abs(temp_fft2(delay:round(end/2))));
+                    rear_I_temp(i, j) = 2*(I + delay);
+                end
+                clc;
+                disp([num2str(i) '/' num2str(m)]);
+            end
+            obj.depth_2D    = rear_I_temp;
+        end
+        
+        function obj = find_surface_2fft_imaging_window(obj, PropertyName, max_len, delay, filter_flag, bwrs, sampling_rate)
+            % determining the front surface index by 2 times fft and
+            % imaging
+            % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
+            % max_len: the end point in the signal
+            % ****
+            % calculate the inam
+            % The sequence is changed unexpectedly. Transverse the matrix
+            img_temp = real(obj.(PropertyName));
+            if strcmp(PropertyName, 'img_hil')
+                sampling_rate = 1; % not downsampling
+            end
+            %             inph         = angle(obj.(PropertyName));
+            % the time domain
+            %             t         = (1:max_len);
+            % ave
+            [m, n, lz] = size(img_temp);
+            %             front_I_temp  = NaN(m, n);
+            L = lz*2;
+%             L = 2^nextpow2(lz);
+            % fft and fft2
+            temp_fft = fft(img_temp, L, 3);
+%             temp_fft = temp_fft(:, :, 1:round(end/2)); % select the range
+            if filter_flag
+                % *********** without log funciton
+                temp_fft_abs = abs(temp_fft);
+                % *****************
+            else
+                % *********** without log funciton
+                temp_fft_abs = abs(temp_fft);
+            end
+            % *********** band selection **********
+            %             w = hann(round(10e6/obj.fs*sampling_rate*L));
+            %             temp_fft_abs = bsxfun(@times, temp_fft_abs, ...
+            %                 permute([w; zeros(L/2-length(w), 1)], [2, 3, 1]));
+            Fs_red       = obj.fs/sampling_rate;
+            f_red        = Fs_red/L:Fs_red/L:Fs_red/2;
+            f_lo         = find(f_red<=0.5e6, 1, 'last' );f_up = find(f_red>=8e6, 1);
+%             L_ori        = 2^nextpow2(size(img_temp, 3)*sampling_rate);
+            L_ori        = L*sampling_rate;
+            temp_fft_abs = cat(3, temp_fft_abs(:,:,f_lo:f_up), zeros(m, n, L_ori/2-(f_up-f_lo+1)));
+            % % **********
+            temp_fft2_signal = fft(temp_fft_abs, [], 3);
+            temp_fft2_signal = abs(temp_fft2_signal(:,:,1:round(end/2)));
+            temp_fft2_signal = bsxfun(@rdivide, temp_fft2_signal, max(temp_fft2_signal, [], 3));
+%             % *** find peaks
+%             map_depth = nan(m, n);
+%             map_amp   = nan(m, n);
+%             for i = 2:m
+%                 for j = 1:n
+%                     Ascan       = squeeze(temp_fft2_signal(i ,j, :));
+% %                     Ascan_diff  = diff(Ascan);
+% %                     Ascan_diff2 = diff(Ascan_diff);
+%                     [pks,locs]     = findpeaks(Ascan);
+%                     [map_amp(i,j), I_max] = max(pks);
+%                     map_depth(i,j) = locs(I_max);
+%                 end
+%                 clc;
+%                 fprintf('searching progress: %0.2f%%\n',100*i/m);
+%             end
+            [M,I]     = max(temp_fft2_signal(:, :, delay:end), [], 3);
+            map_depth = I + delay;
+            map_amp   = M;
+            % imaging
+            Y      = (1:m) / obj.fy * 1e3;
+            X      = (1:n) / obj.fx * 1e3;
+            % depth
+            cf = figure('Name', 'Internal_damage_TOF_2fft_imaging_window');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            h = imagesc(X, Y,  map_depth .* 3000 ./ obj.fs * 1e3);
+            set(h, 'AlphaData', 1-isnan(map_depth))
+            hold on; colormap jet;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            caxis([0 6]);
+%             % amplitude
+%             cf = figure('Name', 'Internal_damage_TOF');
+%             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+%             h = imagesc(X, Y, map_amp);
+%             set(h, 'AlphaData', 1-isnan(map_amp))
+%             hold on; colormap jet;
+%             h = colorbar;
+%             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+%             set(gca, 'fontsize', 16);
+%             set(gca, 'linewidth', 1.5);
+%             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+%             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+        end
+        
+        function obj = find_surface_2fft_imaging_reference(obj, PropertyName, max_len, filter_flag, bwrs,sampling_rate)
+            % determining the front surface index by 2 times fft and
+            % imaging
+            % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
+            % max_len: the end point in the signal
+            % ****
+            % calculate the inam
+            % The sequence is changed unexpectedly. Transverse the matrix
+            img_temp  = real(obj.(PropertyName));
+            %             inph         = angle(obj.(PropertyName));
+            % the time domain
+            %             t         = (1:max_len);
+            % ave
+            [m, n, lz] = size(img_temp);
+            %             front_I_temp  = NaN(m, n);
+            %
+            L = lz*2;
+            %             L = 2^nextpow2(L);
+            % *********** reference
+%             A_scan_Ave = squeeze(mean(img_temp(1:10,1:10,1:end/2), [1, 2]));
+            A_scan_Ave    = obj.refer_Ascan_aligned;
+            temp_fft   = fft(A_scan_Ave, L);
+            temp_fft   = temp_fft(1:round(end/2));
+            if filter_flag
+                % *********** without log funciton
+                temp_fft_ave = abs(temp_fft);
+                temp_fft_max = max(temp_fft_ave);
+                temp_fft_ave = zeros(length(temp_fft_ave),1);
+                for bwr_i = 1:length(bwrs)
+                    bwr          = bwrs(bwr_i);
+                    temp_fft_1dB = temp_fft_ave;
+                    temp_fft_1dB(temp_fft_1dB<10^(bwr/20)*temp_fft_max) ...
+                        = 10^(bwr/20)*temp_fft_max;
+                    %                             temp_fft2_signal = temp_fft2_signal + fft(temp_fft_1dB, L/2);
+                    temp_fft_ave     = temp_fft_ave + temp_fft_1dB;
+                end
+            else
+                % *********** without log funciton
+                temp_fft_ave = abs(temp_fft);
+            end
+            % *********** band selection **********
+            Fs_red = obj.fs/sampling_rate;
+            f_red  = Fs_red/L:Fs_red/L:Fs_red/2;
+            f_lo   = find(f_red<=1e6, 1, 'last' );f_up = find(f_red>=8e6, 1);
+%             L_ori        = 2^nextpow2(size(img_temp, 3)*sampling_rate);
+            mL_ori        = L*sampling_rate;
+            temp_fft_ave  = cat(1, temp_fft_ave(f_lo:f_up), zeros(mL_ori/2-(f_up-f_lo+1), 1));
+            temp_fft2_ave = fft(temp_fft_ave);
+            temp_fft2_ave = abs(temp_fft2_ave(1:end/2));
+            % ********** signal fft and fft2
+            temp_fft     = fft(img_temp, L, 3);
+            temp_fft     = temp_fft(:, :, 1:round(end/2)); % select the range
+            temp_fft_abs = abs(temp_fft);
+%             % ********** divide ref. *********
+%             temp_fft_abs = bsxfun(@rdivide, temp_fft_abs, permute(temp_fft_ave/max(temp_fft_ave), [2, 3, 1]));
+            % *********** band selection **********
+            temp_fft_abs = cat(3, temp_fft_abs(:, :, f_lo:f_up), zeros(m, n, mL_ori/2-(f_up-f_lo+1)));
+            % % **********
+            temp_fft2_signal         = fft(temp_fft_abs, L/2, 3);
+            temp_fft2_signal         = abs(temp_fft2_signal(:,:,1:round(end/2)));
+            temp_fft2_signal(:,:, 1) = 0; % first value is extraordinary
+            temp_fft2_signal = bsxfun(@rdivide, temp_fft2_signal, max(temp_fft2_signal, [], 3));
+            temp_fft2_signal = bsxfun(@minus, temp_fft2_signal, permute(temp_fft2_ave/max(temp_fft2_ave), [2, 3, 1]));
+            [M,I]            = max(temp_fft2_signal, [], 3);
+            map_depth        = I;
+            map_amp          = M;
+            % imaging
+            Y      = (1:m) / obj.fy * 1e3;
+            X      = (1:n) / obj.fx * 1e3;
+            % depth
+            cf = figure('Name', 'Internal_damage_TOF_2fft_reference');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            h = imagesc(X, Y, map_depth .* 3000 ./ obj.fs * 1e3);
+            set(h, 'AlphaData', 1-isnan(map_depth))
+            hold on; colormap jet;
+            h = colorbar; 
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            caxis([0 6]);
+%             % amplitude
+%             cf = figure('Name', 'Internal_damage_TOF');
+%             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+%             h = imagesc(X, Y, map_amp);
+%             set(h, 'AlphaData', 1-isnan(map_amp))
+%             hold on; colormap jet;
+%             h = colorbar;
+%             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+%             set(gca, 'fontsize', 16);
+%             set(gca, 'linewidth', 1.5);
+%             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+%             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+        end
+        
+        function obj = find_surface_2fft_imaging_diff(obj, PropertyName, max_len, filter_flag, bwrs, sampling_rate)
+            % determining the front surface index by 2 times fft and
+            % imaging
+            % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
+            % max_len: the end point in the signal
+            % ****
+            % calculate the inam
+            % The sequence is changed unexpectedly. Transverse the matrix
+            img_temp  = obj.(PropertyName);
+            %             inph         = angle(obj.(PropertyName));
+            % the time domain
+            %             t         = (1:max_len);
+            % ave
+            [m, n, lz] = size(img_temp);
+            %             front_I_temp  = NaN(m, n);
+            L = lz*2;
+            %             L = 2^nextpow2(L); % zero padding for higher freq. resolution
+            % fft and fft2
+            temp_fft = fft(img_temp, L, 3);
+            temp_fft = temp_fft(:, :, 1:round(end/2)); % select the range
+            if filter_flag
+                %                         temp_fft2_signal = zeros(L/2,1);
+                %                         % *********** with log function
+                %                         temp_fft_abs = log10(abs(temp_fft));
+                %                         temp_fft_max = max(temp_fft_abs);
+                %                         temp_fft_bwr = zeros(length(temp_fft_abs),1);
+                %                         for bwr_i = 1:length(bwrs)
+                %                             bwr          = bwrs(bwr_i);
+                %                             temp_fft_1dB = temp_fft_abs;
+                %                             temp_fft_1dB(temp_fft_abs<temp_fft_max+bwr/20) = temp_fft_max+bwr/20;
+                %                             temp_fft2_signal = temp_fft2_signal + fft(temp_fft_1dB, L/2);
+                %                             temp_fft_bwr     = temp_fft_bwr + temp_fft_1dB;
+                %                         end
+                % *********** without log funciton
+                temp_fft_abs = abs(temp_fft);
+                % *****************
+            else
+                %                         % *********** with log function
+                %                         temp_fft_bwr = log10(abs(temp_fft));
+                % *********** without log funciton
+                temp_fft_abs = unwrap(angle(temp_fft));
+            end
+%             temp_fft_abs = diff(temp_fft_abs, 1, 3) ./ temp_fft_abs(:, :, 2:end);
+            % *********** band selection **********
+            Fs_red = obj.fs/sampling_rate;
+            f_red  = Fs_red/L:Fs_red/L:Fs_red/2;
+            f_lo   = find(f_red<=0.5e6, 1, 'last' );f_up = find(f_red>=8e6, 1);
+            %             L_ori        = 2^nextpow2(size(img_temp, 3)*sampling_rate);
+            L_ori  = L*sampling_rate;
+            temp_fft_abs = temp_fft_abs(:,:,f_lo:f_up);
+            for i = 1:m
+                for j = 1:n
+                    temp_fft_abs(i,j,:) = detrend(squeeze(temp_fft_abs(i,j,:))); % detrend the unwrapped phase
+                end
+                clc;
+                fprintf('detrend progress: %0.2f%%\n',100*i/m);
+            end
+            temp_fft_abs = cat(3, temp_fft_abs, zeros(m, n, L_ori/2-(f_up-f_lo+1)));
+            % *********************
+            %                                         temp_fft_bwr = temp_fft_bwr(1:end-1) ...
+            %                                             - temp_fft_bwr(2:end);
+            %                     temp_fft_bwr     = diff(temp_fft_bwr, 2);
+            %                    % **********
+            temp_fft2_signal = fft(temp_fft_abs, L/2, 3);
+            temp_fft2_signal = abs(temp_fft2_signal(:,:,1:floor(end/2)));
+            [M,I]            = max(temp_fft2_signal, [], 3);
+            map_depth        = I;
+            map_amp          = M;
+            % imaging
+            Y      = (1:m) / obj.fy * 1e3;
+            X      = (1:n) / obj.fx * 1e3;
+            % depth
+            cf = figure('Name', 'Internal_damage_TOF_2fft_diff');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            h = imagesc(X, Y, map_depth .* 3000 ./ obj.fs * 1e3);
+            set(h, 'AlphaData', 1-isnan(map_depth))
+            hold on; colormap jet;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            caxis([0 6]);
+            %             % amplitude
+            %             cf = figure('Name', 'Internal_damage_TOF');
+            %             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            %             h = imagesc(X, Y, map_amp);
+            %             set(h, 'AlphaData', 1-isnan(map_amp))
+            %             hold on; colormap jet;
+            %             h = colorbar;
+            %             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            %             set(gca, 'fontsize', 16);
+            %             set(gca, 'linewidth', 1.5);
+            %             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            %             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+        end
+        
+        function obj = find_surface_2fft_imaging_wavelet(obj, PropertyName, filter_flag, sampling_rate)
+            % determining the front surface index by 2 times fft and
+            % imaging
+            % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
+            % max_len: the end point in the signal
+            % ****
+            % calculate the inam
+            % The sequence is changed unexpectedly. Transverse the matrix
+            img_temp = obj.(PropertyName);
+            %             inph         = angle(obj.(PropertyName));
+            % the time domain
+            %             t         = (1:max_len);
+            % ave
+            [m, n, lz] = size(img_temp);
+            %             front_I_temp  = NaN(m, n);
+            L = lz*2;
+%             L = 2^nextpow2(L); % zero padding for higher freq. resolution
+            % fft and fft2
+            temp_fft = fft(img_temp, L, 3);
+            temp_fft = temp_fft(:, :, 1:round(end/2)); % select the range
+            if filter_flag
+                % *********** without log funciton
+                temp_fft_abs = abs(temp_fft);
+                % *****************
+            else
+                % *********** without log funciton
+                temp_fft_abs = abs(temp_fft);
+            end
+            % *********** wavelet ************
+            wv = 'db3';
+            for i = 1:m
+                for j = 1:n
+                    temp_ascan = squeeze(temp_fft_abs(i ,j ,:));
+                    [c,l] = wavedec(temp_ascan, 4, wv);
+                    % remove
+                    c(1:l(1))    = 0 * c(1:l(1));
+                    c(l(1):l(2)) = 0.5 * c(l(1):l(2));
+%                     c(l(2):l(3)) = 0.5 * c(l(2):l(3));
+                    temp_fft_abs(i ,j ,:) = waverec(c,l,wv);
+                end
+                clc;
+                fprintf('wavelet progress: %0.2f%%\n',100*i/m);
+             end
+            % ***********************           
+            % *********** band selection **********
+            Fs_red       = obj.fs/sampling_rate;
+            f_red        = Fs_red/L:Fs_red/L:Fs_red/2;
+            f_lo         = find(f_red<=1e6, 1, 'last' );f_up = find(f_red>=8e6, 1);
+            %             L_ori        = 2^nextpow2(size(img_temp, 3)*sampling_rate);
+            L_ori        = L*sampling_rate;
+            temp_fft_abs = cat(3, temp_fft_abs(:,:,f_lo:f_up), zeros(m, n, L_ori/2-(f_up-f_lo+1)));
+            % **********
+            temp_fft2_signal = fft(temp_fft_abs, L/2, 3);
+            temp_fft2_signal = abs(temp_fft2_signal(:,:,1:floor(end/2)));
+            [M,I]            = max(temp_fft2_signal, [], 3);
+            map_depth        = I;
+            map_amp          = M;
+            % imaging
+            Y      = (1:m) / obj.fy * 1e3;
+            X      = (1:n) / obj.fx * 1e3;
+            % depth
+            cf = figure('Name', 'Internal_damage_TOF_2fft_diff');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            h = imagesc(X, Y, map_depth .* 3000 ./ obj.fs * 1e3);
+            set(h, 'AlphaData', 1-isnan(map_depth))
+            hold on; colormap jet;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            caxis([0 6]);
+            %             % amplitude
+            %             cf = figure('Name', 'Internal_damage_TOF');
+            %             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            %             h = imagesc(X, Y, map_amp);
+            %             set(h, 'AlphaData', 1-isnan(map_amp))
+            %             hold on; colormap jet;
+            %             h = colorbar;
+            %             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            %             set(gca, 'fontsize', 16);
+            %             set(gca, 'linewidth', 1.5);
+            %             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            %             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+        end
+        
+        function obj = align_front_surface(obj, delay, PropertyName)
+            % align the front surface
+            % delay: delay for shifting
+            % ****
+            img_temp     = obj.(PropertyName);
+            front_I_temp = obj.front_I;
+            rear_I_temp  = obj.rear_I;
+            [m, n, ~] = size(img_temp);
+            for i = 1:m
+                for j = 1:n
+                    A_scan   = img_temp(i, j, :);
+                    front_Ia = front_I_temp(i, j);
+                    if front_Ia && sum(A_scan)~=0
+                        A_scan = circshift(A_scan, delay-front_Ia);
+                    end
+                    % resign
+                    img_temp(i, j, :)  = A_scan;
+                    front_I_temp(i, j) = delay;
+                    rear_I_temp(i, j)  = rear_I_temp(i, j) + delay-front_Ia;
+                end
+                clc;
+                disp([num2str(i) '/' num2str(m)]);
+            end
+            obj.(PropertyName) = img_temp;
+            obj.front_I = front_I_temp;
+            obj.rear_I  = rear_I_temp;
+        end
+        
+        function obj = align_rear_surface(obj, delay, PropertyName)
+            % align the front surface
+            % delay: delay for shifting
+            % ****
+            img_temp     = obj.(PropertyName);
+            front_I_temp = obj.front_I;
+            rear_I_temp  = obj.rear_I;
+            [m, n, l]    = size(img_temp);
+            % flip the dataset
+            img_temp     = flip(img_temp, 3);
+            I_temp       = l - rear_I_temp;
+            rear_I_temp  = l - front_I_temp;
+            front_I_temp = I_temp;
+            for i = 1:m
+                for j = 1:n
+                    A_scan   = img_temp(i, j, :);
+                    front_Ia = front_I_temp(i, j);
+                    if front_Ia && sum(A_scan)~=0
+                        A_scan = circshift(A_scan, round(delay-front_Ia));
+                    end
+                    % resign
+                    img_temp(i, j, :)  = A_scan;
+                    front_I_temp(i, j) = delay;
+                    rear_I_temp(i, j)  = rear_I_temp(i, j) + delay-front_Ia;
+                end
+                clc;
+                disp([num2str(i) '/' num2str(m)]);
+            end
+            obj.(PropertyName) = img_temp;
+            obj.front_I = front_I_temp;
+            obj.rear_I  = rear_I_temp;
+        end
+        
+        % ************** internal damage features imaging *************
         function obj = damage_imaging(obj)
             % plot the internal damge features in 3D
-            back_surface = (obj.rear_I - obj.front_I) / obj.fs * 1e3 * 3000 / 2;
-            inam         = abs(obj.img_hil);
-            [Y, X] = ndgrid(1:size(back_surface,1), 1:size(back_surface,2));
+            front_I_temp = obj.front_I;
+            back_surface = (obj.rear_I - front_I_temp) / obj.fs * 1e3 * 3000 / 2;
+            %             inam         = abs(obj.img_hil_filter);
+            inph_ex = angle(obj.img_hil);
+            inam    = diff(unwrap(inph_ex, [], 3), 1, 3) /2 / pi * obj.fs;
+            [Y, X]  = ndgrid(1:size(back_surface,1), 1:size(back_surface,2));
             Y            = Y / obj.fy * 1e3;
             X            = X / obj.fy * 1e3;
             amp_rear     = zeros(size(obj.front_I));
@@ -1310,10 +2232,12 @@ classdef class_process_RFdata
                 for j = 1:size(inam, 2)
                     % if rear index is out of boundary, set mean
                     if isnan(obj.rear_I(i, j)) || round(obj.rear_I(i, j)) > size(inam, 3) || round(obj.rear_I(i, j)) <= 0
-                        amp_rear(i, j)    = inam(i, j, rear_I_mean);
+                        amp_rear(i, j) = inam(i, j, rear_I_mean);
                     else
-                        amp_rear(i, j)    = inam(i, j, round(rear_I_index(i,j)));
+                        rear_I_ij = round(rear_I_index(i,j));
+                        amp_rear(i, j) = mean(inam(i, j, rear_I_ij-3:rear_I_ij+1));
                     end
+                    amp_rear(i, j) = amp_rear(i, j);
                 end
             end
             % compute the amp. along depth
@@ -1368,28 +2292,111 @@ classdef class_process_RFdata
             view([15 65 40]);
         end
         
+        function obj = damage_depth_imaging(obj, flag)
+            % plot the damge depth
+            %
+            if flag==1 % using front and back surface to calculate
+                depth_surface = (obj.rear_I - obj.front_I) / obj.fs * 1e3 * 3000 / 2;
+                rear_I_temp = obj.rear_I;
+            else
+                depth_surface = obj.depth_2D / obj.fs * 1e3 * 3000 / 2;
+                rear_I_temp = obj.front_I + obj.depth_2D;
+            end
+            Y      = (1:size(depth_surface,1)) / obj.fy * 1e3;
+            X      = (1:size(depth_surface,2)) / obj.fx * 1e3;
+            % top view of depth
+            cf = figure('Name', 'Internal_damage_features_dep_top_view');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            ax = subplot(1, 1, 1);
+            h = imagesc(X, Y, depth_surface);
+            %             h = imagesc(depth_surface);
+            set(h, 'AlphaData', 1-isnan(depth_surface))
+            % set(gca, 'ydir', 'reverse');
+            hold on;
+            colormap jet;
+            h = colorbar;
+            caxis([0 6]);
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
+            set(ax, 'fontsize', 16);
+            set(ax, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            % display the surfaces: phase, amp., index
+            inam = abs(obj.img_hil);
+            amp_front    = zeros(size(obj.front_I));
+            amp_rear     = zeros(size(obj.front_I));
+            front_I_mean = round(mean(obj.front_I, 'all', 'omitnan'));
+            rear_I_mean = round(mean(rear_I_temp, 'all', 'omitnan'));
+            %             rear_I_mean = round(mean(mean(obj.rear_I)));
+            for i = 1:size(inam, 1)
+                for j = 1:size(inam, 2)
+                    % if front index is out of boundary, set mean
+                    if isnan(obj.front_I(i, j)) || round(obj.front_I(i, j)) <= 0 || round(obj.front_I(i, j)) > size(inam, 3)
+                        amp_front(i, j)   = inam(i, j, front_I_mean);
+                    else
+                        amp_front(i, j)   = inam(i, j, round(obj.front_I(i, j)));
+                    end
+                    % if rear index is out of boundary, set mean
+                    if isnan(rear_I_temp(i, j)) || round(rear_I_temp(i, j)) > size(inam, 3) || round(rear_I_temp(i, j)) <= 0
+                        amp_rear(i, j)    = inam(i, j, rear_I_mean);
+                    else
+                        amp_rear(i, j)    = inam(i, j, round(rear_I_temp(i, j)));
+                    end
+                end
+            end
+            cf = figure('Name', 'Internal_damage_features_amp_top_view');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            ax = subplot(1, 1, 1);
+            imagesc(X, Y, amp_rear);
+            shading flat;
+            hold on;
+            colormap jet;
+            h  = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            set(ax, 'fontsize', 16);
+            set(ax, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+        end
+        
         % ******************** filter ***********
-        function obj = Filter_lowpass(obj, bandpassFreq, PropertyName)
+        function obj = Filter_lowpass(obj, bandpassFreq, PropertyName, sampling_rate)
             % Filter the 3d dataset by low-pass filter
             % bandpassFreq: passband freq. of the filter
             % PropertyName: 'img', 'img_hil' or 'img_hil_filter' ...
-            [lx, ly, ~] = size(obj.(PropertyName));
-            % save in the obj.img_hil_filter
-            obj.img_hil_filter = zeros(size(obj.(PropertyName)));
-            % define a low-pass filter and filter the signals
-            [~, lpFilt] = lowpass(squeeze(obj.(PropertyName)(1, 1, :)), bandpassFreq, obj.fs, ...
-                'ImpulseResponse', 'fir', 'Steepness', 0.8, 'StopbandAttenuation', 60);
-            delay       = mean(grpdelay(lpFilt));
-            for x = 1: lx
-                for y = 1:ly
-                    Ascan    = squeeze(obj.(PropertyName)(x, y, :));
-                    Ascan_as = filter(lpFilt, Ascan);
-                    Ascan_as = circshift(Ascan_as, -delay);
-                    obj.img_hil_filter(x, y, :) = Ascan_as;
-                end
-                clc;
-                disp([num2str(x), '/' , num2str(lx)]);
-            end
+            img_temp        = obj.(PropertyName);
+            [lx, ly, lz] = size(img_temp);
+            L = 2^nextpow2(lz);
+            % fft and fft2
+            img_temp = fft(img_temp, L, 3); 
+            cutoff_w = bandpassFreq/obj.fs*sampling_rate*L;
+            img_temp(:,:,round(cutoff_w):end-round(cutoff_w)) = 0;
+            img_temp_filter = ifft(img_temp, L, 3, 'symmetric');
+            % img_temp_filter = img_temp;
+            %             % define a low-pass filter and filter the signals
+%             [~, lpFilt] = lowpass(squeeze(obj.(PropertyName)(1, 1, :)), bandpassFreq, obj.fs, ...
+%                 'ImpulseResponse', 'fir');
+%             delay       = mean(grpdelay(lpFilt));
+%             for x = 1: lx
+%                 for y = 1:ly
+%                     Ascan    = squeeze(img_temp(x, y, :));
+%                     Ascan_as = filter(lpFilt, Ascan);
+%                     Ascan_as = circshift(Ascan_as, -delay);
+%                     img_temp_filter(x, y, :) = Ascan_as;
+%                 end
+%                 clc;
+%                 disp([num2str(x), '/' , num2str(lx)]);
+%             end
+            obj.img_hil_filter = img_temp_filter;
+        end
+        
+        function obj = Filter_3DGaussian(obj, sigma, PropertyName)
+            % Filter the 3d dataset by 3D Gaussian filter
+            % sigma: sigma of the filter
+            % PropertyName: 'img', 'img_hil' or 'img_hil_filter' ...
+            img_temp        = obj.(PropertyName);
+            img_temp_filter = imgaussfilt3(real(img_temp), sigma) + 1i*imgaussfilt3(imag(img_temp), sigma);
+            obj.img_hil_filter = img_temp_filter;
         end
         
         function show_logGabor_Scaleogram(obj, f0, sigma, x, y)
@@ -1425,7 +2432,7 @@ classdef class_process_RFdata
                 % flipped and conjugated!
                 Scaleogram(i, :) = conj(flip(as));
             end
-            figure, imagesc( (1:length(Ascan)) / obj.fs, f0, angle(Scaleogram));
+            figure, imagesc( (1:length(Ascan)) / obj.fs, f0, abs(Scaleogram));
             colorbar;
             hold on;
             line([obj.front_I(x, y) / obj.fs; obj.front_I(x, y)  / obj.fs], [f0(1), f0(end)], ...
@@ -1530,7 +2537,7 @@ classdef class_process_RFdata
             % find the front and back
             inam_ascan             = abs(Ascan_as);
             MinPeakHeight          = threshold * max(inam_ascan);
-            MinPeakDistance        = length(inam_ascan) / 3;
+            MinPeakDistance        = length(inam_ascan) / 5;
             [~, Idx_walls]         = findpeaks(inam_ascan, 1:length(inam_ascan), ...
                 'MinPeakHeight',  MinPeakHeight, 'MinPeakDistance', MinPeakDistance);
             front_I_interp         = Idx_walls(1);
@@ -2078,7 +3085,6 @@ classdef class_process_RFdata
                     3, 'magenta', 'filled', ...
                     'DisplayName','Rear surface');
                 hold on;
-                
                 % select the yslice
                 scatter3(x, yslice * ones(1, ly*ds_rate), ...
                     obj.front_I(y_idx, :)/ obj.fs * 1e3 * 3000/2, ...
@@ -2219,12 +3225,9 @@ classdef class_process_RFdata
             % The sequence is changed unexpectedly. Transverse the matrix
             dataset = obj.(property_name);
             dataset = medfilt3(dataset, [3, 3, 3], 'replicate');
-            
             dataset = (dataset + pi/2) / pi * 180;
             front_p = obj.front_I;
             bakc_p  = obj.rear_I;
-            x       = (1:(win(end)-win(1)+1))/obj.fx * 1e3;
-            y       = (1:(win(end)-win(1)+1))/obj.fy * 1e3;
             z       = (1:size(dataset, 3))/obj.fs * 1e3 * 3000/2;
             cf      = figure('Name', ['B_scan_angles_', B_type, '_', num2str(win(end))]);
             set(cf, 'Position', [0, 0, length(win)*2, 1200], 'color', 'white');
@@ -2237,6 +3240,8 @@ classdef class_process_RFdata
             open(v);
             %
             if (B_type == 'x')
+                x = (1:size(dataset, 1))/obj.fx * 1e3;
+                y = (1:(win(end)-win(1)+1))/obj.fy * 1e3;
                 for index = 1:size(dataset,1)
                     % B scan image
                     % side view
@@ -2244,7 +3249,7 @@ classdef class_process_RFdata
                     figure(cf);
                     ca1 = subplot(2, 1, 1);
                     % imagesc(x, z, B_scan');
-                    pcolor(x, z, B_scan');
+                    pcolor(y, z, B_scan');
                     shading flat;
                     set(ca1, 'ydir', 'reverse');
                     hold on;
@@ -2258,17 +3263,17 @@ classdef class_process_RFdata
                     %                         3,  [122 122 121]/255, 'filled', ...
                     %                         'DisplayName','Interply track');
                     %                     hold on;
-                    h2 = scatter(x, front_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
-                        3, 'red', 'filled', ...
-                        'DisplayName','Front surface');
-                    hold on;
-                    h3 = scatter(x, bakc_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
-                        3, 'magenta', 'filled', ...
-                        'DisplayName','Rear surface');
-                    hold on;
+                    %                     h2 = scatter(win, front_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
+                    %                         3, 'red', 'filled', ...
+                    %                         'DisplayName','Front surface');
+                    %                     hold on;
+                    %                     h3 = scatter(win, bakc_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
+                    %                         3, 'magenta', 'filled', ...
+                    %                         'DisplayName','Rear surface');
+                    %                     hold on;
                     % figure setup
                     colormap(jet);
-                    caxis(ca1, [0 4.5]);
+                    caxis(ca1, [0 4]);
                     h = colorbar;
                     set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Angle (\circ)');
                     set(ca1, 'Fontname', 'times new Roman');
@@ -2281,7 +3286,7 @@ classdef class_process_RFdata
                     z_index     = round(mean(front_p, 'all', 'omitnan') ...
                         + mean(bakc_p-front_p, 'all', 'omitnan') / size(dataset,1) * index);
                     B_scan = squeeze(dataset(1:end, 1:end, z_index));
-                    pcolor(x, y, B_scan);
+                    pcolor(y, x, B_scan);
                     shading flat;
                     hold on;
                     title(['z =' num2str(z_index/obj.fs * 1e3 * 3000/2) ' mm']);
@@ -2297,7 +3302,7 @@ classdef class_process_RFdata
                     hold on;
                     % figure setup
                     colormap(jet);
-                    caxis(ca2, [0 4.5]);
+                    caxis(ca2, [0 4]);
                     h = colorbar;
                     set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Angle (\circ)');
                     set(ca2, 'Fontname', 'times new Roman');
@@ -2998,7 +4003,7 @@ classdef class_process_RFdata
                     %                     if idx ==9 && idy==80 % for debugging
                     %                         a = 1;
                     %                     end
-                    A_ori                  = squeeze(img_ori(idx, idy, :));
+                    A_ori = squeeze(img_ori(idx, idy, :));
                     % time-varying gain
                     %                     A_ori                  = A_ori .* (1:length(A_ori))';
                     % track the phase by wrapped inst. phase
@@ -3006,26 +4011,29 @@ classdef class_process_RFdata
                     %                     [lct, ~, ~, ~, ~]                          = fx_track_byphase(Idx_resin, A_ori, threshold);
                     % track the -pi/2 by distance
                     %                     [lct, ~, ~] = fx_track_bycluster(hilbert(A_ori), threshold, 23);
-                    Idx_resin              = linspace(obj.front_I(idx, idy), ...
+                    Idx_resin = linspace(obj.front_I(idx, idy), ...
                         obj.rear_I(idx, idy), nol);  % !!!!! 25 is the number of layers incl. front and back surfaces
                     % track the -pi/2 by phase
                     % [lct, ~, ~, ~, ~]      = fx_track_byphase(Idx_resin, A_ori, threshold);
-                    power_noise            = 1;
-                    [lct, pct, err, ~, ~]  = fx_track_byphase_step(Idx_resin, real(A_ori), obj.fs, threshold, power_noise);
-                    errors_pos_repeat(idx, idy, :) = err;
-                    % thickness calculation
-                    thickness(idx, idy, :) = diff(lct);
-                    % save to 3d vector
-                    if sum(isnan(lct)) > 10
-                        temp = 1;
+                    %  power_noise            = 1;
+                    %  [lct, pct, err, ~, ~]  = fx_track_byphase_step(Idx_resin, real(A_ori), obj.fs, threshold, power_noise);
+                    [lct, ~, err, ~, ~] = fx_track_byphase_2pi_increment(Idx_resin, A_ori, threshold);
+                    if ~isempty(err)
+                        errors_pos_repeat(idx, idy, :) = err;
+                        % thickness calculation
+                        thickness(idx, idy, :) = diff(lct);
+                        % save to 3d vector
+                        if sum(isnan(lct)) > 10
+                            temp = 1;
+                        end
+                        lct_3d(idx, idy, :)    = round(lct);
+                        %                     mask_plytrack_temp(idx, idy, lct(2:end-1)) = 1;
+                        % derive the rear surface by phase
+                        %                     I_rear_surface       = interp1(A_inph_unw, 1:length(A_inph_unw), ...
+                        %                         phase_rear_surface) + round(obj.front_I(idx, idy));
+                        obj.rear_I(idx, idy)   = lct(end);
+                        obj.front_I(idx, idy)  = lct(1);
                     end
-                    lct_3d(idx, idy, :)    = round(lct);
-                    %                     mask_plytrack_temp(idx, idy, lct(2:end-1)) = 1;
-                    % derive the rear surface by phase
-                    %                     I_rear_surface       = interp1(A_inph_unw, 1:length(A_inph_unw), ...
-                    %                         phase_rear_surface) + round(obj.front_I(idx, idy));
-                    obj.rear_I(idx, idy)   = lct(end);
-                    obj.front_I(idx, idy)  = lct(1);
                     % save the 3D scatter points
                     num_interplies         = length(lct)-2; % incl. the front and rear surfaces
                     layer_counts_temp      = cat(2, layer_counts_temp, (1:num_interplies));
@@ -3585,7 +4593,8 @@ classdef class_process_RFdata
             % ***
             % calculate the inph
             % The sequence is changed unexpectedly. Transverse the matrix
-            inph_ex = obj.mask_plytrack;
+            inph_ex      = obj.mask_plytrack;
+            front_I_temp = obj.front_I;
             [m, n, ~] = size(inph_ex);
             if ~isempty(win_x)
                 inph_ex = inph_ex(win_x, :, :);
@@ -3598,12 +4607,15 @@ classdef class_process_RFdata
                 for j = 1:n
                     k = find(inph_ex(i, j, :), layer);  % if the non-zero values are less that layer, return the real numbers of non-zero values
                     if length(k) >= layer
-                        profile_layer(i, j) = (k(end) - obj.front_I(i, j)) / obj.fs * 1e6;
+                        profile_layer(i, j) = (k(end) - front_I_temp(i, j)) / obj.fs * 1e6;
                     else % set the last inter-ply as NaN otherwise
                         profile_layer(i, j) = NaN;
                     end
                 end
             end
+            % fill nan and filter
+            [profile_layer, ~] = fillmissing(profile_layer, 'movmedian', 10);
+            profile_layer      = medfilt2(profile_layer, [3 3]);
             % *** add profile of inst. amp., inst. phase, and inst. freq.
             inam_profile = NaN(m, n);
             inph_profile = NaN(m, n);
@@ -3613,9 +4625,14 @@ classdef class_process_RFdata
             infq_ex = diff(unwrap(inph_ex, [], 3), 1, 3) /2 / pi * obj.fs;
             for i = 1: m
                 for j = 1: n
-                    inam_profile(i,j) = inam_ex(i, j, round(profile_layer(i,j)*obj.fs/1e6));
-                    inph_profile(i,j) = inph_ex(i, j, round(profile_layer(i,j)*obj.fs/1e6));
-                    infq_profile(i,j) = infq_ex(i, j, round(profile_layer(i,j)*obj.fs/1e6));
+                    if profile_layer(i,j)*obj.fs/1e6>0.5 % no zero
+                        inam_profile(i,j) = inam_ex(i, j, ...
+                            front_I_temp(i,j)+round(profile_layer(i,j)*obj.fs/1e6));
+                        inph_profile(i,j) = inph_ex(i, j, ...
+                            front_I_temp(i,j)+round(profile_layer(i,j)*obj.fs/1e6));
+                        infq_profile(i,j) = infq_ex(i, j, ...
+                            front_I_temp(i,j)+round(profile_layer(i,j)*obj.fs/1e6));
+                    end
                 end
             end
             % **********
@@ -3645,17 +4662,111 @@ classdef class_process_RFdata
             % ****** display
             figure('Name', ['one_interply_inst_matrics' , filtername, '_', num2str(layer)]);
             ax            = subplot(3, 1, 1);
-            imagesc(ax, X, Y, inam_profile);
-            hold on;
+            imagesc(ax, Y, X, inam_profile);
+            hold on; axis image;
             h = colorbar;
             ax            = subplot(3, 1, 2);
-            imagesc(ax, X, Y, inph_profile);
-            hold on;
+            imagesc(ax, Y, X, inph_profile);
+            hold on; axis image;
             h = colorbar;
             ax            = subplot(3, 1, 3);
-            imagesc(ax, X, Y, infq_profile);
+            imagesc(ax, Y, X, infq_profile);
+            hold on; axis image;
+            h = colorbar;
+        end
+        
+        function [obj, inam_profile] = show_oneinterply_2dfft(obj, layer, filtername, v, win_x, win_y, TOF)
+            % demonstrate the profile of one inter-ply in 3d
+            % layer: 'layer'th layer
+            % filtername: 'nofilter' or 'logGabr', for naming the figure.
+            % v: the average velocity of the laminate
+            % win_x, win_y: the window to cut the 2d area
+            % TOF: TOF of one ply, unit: sampling points
+            % ***
+            % calculate the inph
+            % The sequence is changed unexpectedly. Transverse the matrix
+            inph_ex      = obj.mask_plytrack;
+            front_I_temp = obj.front_I;
+            [m, n, ~]    = size(inph_ex);
+            if ~isempty(win_x)
+                inph_ex = inph_ex(win_x, :, :);
+            end
+            if ~isempty(win_y)
+                inph_ex = inph_ex(:, win_y, :);
+            end
+            profile_layer = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
+            for i = 1: m
+                for j = 1:n
+                    k = find(inph_ex(i, j, :), layer);  % if the non-zero values are less that layer, return the real numbers of non-zero values
+                    if length(k) >= layer
+                        profile_layer(i, j) = (k(end) - front_I_temp(i, j)) / obj.fs * 1e6;
+                    else % set the last inter-ply as NaN otherwise
+                        profile_layer(i, j) = NaN;
+                    end
+                end
+            end
+            % fill nan and filter
+            [profile_layer, ~] = fillmissing(profile_layer, 'movmedian', 10);
+            profile_layer      = medfilt2(profile_layer, [5 5]);
+            % *** add profile of inst. amp., inst. phase, and inst. freq.
+            inam_profile = NaN(m, n);
+            inam_ex = abs(obj.img_hil);
+            for i = 1: m
+                for j = 1: n
+                    if profile_layer(i,j)*obj.fs/1e6>0.5 % no zero
+                        inam_profile(i,j) = max(inam_ex(i, j, ...
+                            front_I_temp(i,j)+round(profile_layer(i,j)*obj.fs/1e6)-20:...
+                            front_I_temp(i,j)+round(profile_layer(i,j)*obj.fs/1e6)+10), [], 3);
+                    end
+                end
+            end
+            %
+            inam_profile  = fillmissing(inam_profile,'linear');
+            fft2D         = fft2(inam_profile);
+            fft2D_shifted = fftshift(fft2D);
+            % **********
+            figure('Name', ['one_interply_profile' , filtername, '_', num2str(layer)]);
+            ax            = subplot(1, 1, 1);
+            X             = (1: size(profile_layer, 1)) / obj.fx * 1e3;
+            Y             = (1: size(profile_layer, 2)) / obj.fy * 1e3;
+            % convert to distance mm from TOF us
+            profile_layer = profile_layer * v / 2 / 1e3;
+            imagesc(ax, X, Y, profile_layer);
             hold on;
             h = colorbar;
+            % keep the color axis in one ply
+            if TOF~=0
+                ply_front     = layer*TOF-TOF/2;
+                ply_back      = layer*TOF+TOF/2;
+                caxis([ply_front/obj.fs*1e3*v/2, ply_back/obj.fs*1e3*v/2]); % for comparision, the 'caxis' needs to be modified
+            end
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
+            set(ax, 'fontsize', 16);
+            set(ax, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            %             zlabel('\fontname {times new roman} Time(\mus)', 'fontsize', 16);
+            set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(gca, 'linewidth', 2);
+            % ****** display
+            figure('Name', ['one_interply_inst_matrics' , filtername, '_', num2str(layer)]);
+            ax            = subplot(1, 3, 1);
+            imagesc(ax, Y, X, inam_profile);
+            hold on; axis image;
+            h = colorbar;
+            colormap(jet);
+            ax            = subplot(1, 3, 2);
+            imagesc(ax, Y, X, log10(abs(fft2D_shifted)));
+            hold on; axis image;
+            h = colorbar;
+            colormap(jet);
+            ax            = subplot(1, 3, 3);
+            imagesc(ax, Y, X, angle(fft2D_shifted));
+            hold on; axis image;
+            h = colorbar;
+            colormap(jet);
+            % asign the image
+            obj.C_scan_inam_plywise = inam_profile;
         end
         
         function show_B_scan_interply(obj, B_type, index, win, PropertyName)
@@ -4432,9 +5543,9 @@ classdef class_process_RFdata
         function obj = align_refer_ascan(obj, x, y)
             % align the reference ascan and the recorded ascan
             % x, y: the x, y index to select the A scan
-            record_signal = squeeze(obj.img(x, y, :));
+            record_signal     = squeeze(obj.img(x, y, :));
             record_signal_hil = hilbert(record_signal);
-            refer_Ascan_hil = hilbert(obj.refer_Ascan);
+            refer_Ascan_hil   = hilbert(obj.refer_Ascan);
             t =  (1:length(record_signal)) / obj.reference.fs;
             t_ref = (1:length(obj.refer_Ascan)) / obj.reference.fs; % the time space of reference signal
             % display the figures
@@ -4887,14 +5998,15 @@ classdef class_process_RFdata
             [lx, ly, lz] = size(obj.img);
             % B scan image
             img_WienerDeconv_temp = NaN(lx, ly, lz);
+            temp_img = obj.img_hil;
             for i = 1:lx
                 for j = 1:ly
-                    ori_signal                     = squeeze(obj.img(i, j, :));
+                    ori_signal                     = squeeze(temp_img(i, j, :));
                     % remove the direct component
                     ori_signal                     = ori_signal - mean(ori_signal);
                     % wiener deconvolve
                     wienerdeconv_s                 = fx_wiener_deconvolution_1d(ori_signal', kernel', q_factor);
-                    img_WienerDeconv_temp(i, j, :) = abs(hilbert(wienerdeconv_s));
+                    img_WienerDeconv_temp(i, j, :) = wienerdeconv_s;
                 end
                 clc;
                 disp([num2str(i) '/' num2str(lx)]);
@@ -5292,8 +6404,8 @@ classdef class_process_RFdata
             for i = 1: size(inam, 1)
                 for j = 1:size(inam, 2)
                     % take both front and back surfaces into consideration
-                    front_index             = obj.front_I(i, j);
-                    back_index              = obj.rear_I(i, j);
+                    front_index = obj.front_I(i, j);
+                    back_index  = obj.rear_I(i, j);
                     if length(ratio)>1 % take average of the amplitude
                         C_scan_inam_temp(i, j) = 0;
                         %                         index_sum = 0;
@@ -5310,7 +6422,8 @@ classdef class_process_RFdata
                         index                   = (1 - ratio)*front_index + ratio*back_index;
                         C_scan_index_temp(i, j) = index;
                         if index < back_index && ~isnan(index)
-                            C_scan_inam_temp(i, j) = inam(i, j, round(index));
+                            C_scan_inam_temp(i, j) = sum(inam(i, j, ...
+                                round(index)-10:round(index)+10));
                         end
                     end
                 end
@@ -5337,6 +6450,14 @@ classdef class_process_RFdata
             %             %             zlabel('\fontname {times new roman} Time(\mus)', 'fontsize', 16);
             %             set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
             %             set(gca, 'linewidth', 2);
+            % ************************** 
+%             [Y, X]       = size(C_scan_inam_temp);
+%             cw           = 10;
+%             filtStruct   = createMonogenicFilters(Y, X, cw, 'lg', 0.41);
+%             [m1, m2, m3] = monogenicSignal(C_scan_inam_temp, filtStruct);
+%             % Local phase (calculated on a per-scale basis)
+%             LP = localPhase(m1, m2, m3);
+%             obj.mono_img = LP;
         end
         
         function [obj, C_scan_inam_temp, C_scan_index_temp] = define_parallel_inphCscan(obj, ratio, PropertyName)
@@ -5393,7 +6514,7 @@ classdef class_process_RFdata
             % center: [j, i], the centers of the mask for Radon transform
             % radii: the radii of of the mask for Radon transform
             % ***
-            inam             = abs(obj.(PropertyName));
+            inam             = angle(obj.(PropertyName));
             inph_ex          = obj.mask_plytrack;
             C_scan_index     = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
             C_scan_inam_temp = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
@@ -5441,7 +6562,9 @@ classdef class_process_RFdata
                 for i = 1: size(inph_ex, 1)
                     for j = 1:size(inph_ex, 2)
                         if obj.rear_I(i, j) > C_scan_index(i, j) && inam(i, j, C_scan_index(i, j)) % check the rear surface and assign NaN
-                            C_scan_inam_temp(i, j) = inam(i, j, C_scan_index(i, j));
+                            C_scan_inam_temp(i, j) = sum(...
+                                inam(i, j, C_scan_index(i, j):C_scan_index(i, j))...
+                                , 3);
                         else
                             C_scan_inam_temp(i, j) = NaN;
                         end
@@ -6503,7 +7626,7 @@ classdef class_process_RFdata
             pcolor(ax, X, Y, noisy_img);
             set(gca, 'YDir', 'reverse');
             shading flat;
-            colormap gray;
+            colormap jet;
             h          = colorbar;
             h.Location = 'northoutside';
             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
@@ -7039,12 +8162,15 @@ classdef class_process_RFdata
             C_scan_inam_LG = obj.(imagename);
             NaN_part       = isnan(C_scan_inam_LG);
             % fill nan
-            if sum(isnan(NaN_part))>0
+            if sum(NaN_part, 'all')>0
                 C_scan_inam_LG = fx_inpaint_nans(C_scan_inam_LG, 5);
             end
             % pad the C_scan_inam matrix
             %             wl_max                            = max(wavelength);
-            C_scan_inam_RT_pad                = C_scan_inam_LG; % no padding
+            C_scan_inam_RT_pad = C_scan_inam_LG; % no padding
+            % **** Enhance contrast using histogram equalization
+            %             C_scan_inam_RT_pad = histeq(C_scan_inam_RT_pad);
+            % *******
             %             C_scan_inam_RT_pad = padarray(C_scan_inam_LG, [round(wl_max / 2) round(wl_max / 2)], 'replicate');
             %             C_scan_inam_RT_pad                    = padarray(C_scan_inam_LG, [round(wl_max / 2) round(wl_max / 2)], mean(C_scan_inam_LG, 'all', 'omitnan'));
             %
@@ -7179,7 +8305,7 @@ classdef class_process_RFdata
             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Angle (rad.)');
         end
         
-        function show_orientation_by_ID_allwl(obj, wavelength, orientation, K, imagename, angle_compens)
+        function [image_orientation, Idof_N] = show_orientation_by_ID_allwl(obj, wavelength, orientation, K, imagename, angle_compens)
             % demonstrate the orientation extracted by Information diagram
             % use the logGabor filtered images calcualated before
             % orientation: the orientation for Gabor filter, to
@@ -7223,6 +8349,7 @@ classdef class_process_RFdata
                 distances_i_pow2 = (r_nan(i)-X).^2 + (l_nan(i)-Y).^2;
                 distances_pow2   = min(distances_pow2, distances_i_pow2);
             end
+            kurtosis_map = nan(lx, ly);
             for i = round(wl_min)+1: lx - round(wl_min)-1
                 for j = round(wl_min)+1: ly - round(wl_min)-1
                     ID                      = squeeze(gabormag(i, j, :));
@@ -7231,7 +8358,7 @@ classdef class_process_RFdata
                         image_wavelength(i, j)  = NaN;
                         continue;
                     end
-                    ID        = reshape(ID, [obj.frow, obj.fcol]);
+                    ID = reshape(ID, [obj.frow, obj.fcol]);
                     % check the nan and adjust the ID
                     %                     distances = sqrt((r_nan-i).^2 + (l_nan-j).^2);
                     %                     ID_bound  = fx_binarySearch(...
@@ -7256,13 +8383,22 @@ classdef class_process_RFdata
                     %                     ID_shift = circshift(ID, round(size(ID, 2) / 2), 2);
                     % ****************** %
                     %                     ID_sub = ID - ID_shift;
-                    [C, I]                  = max(ID(:));
-                    if C < mean(ID, [1,2]) + std(ID, [], 'all')
+                    [C, I]          = max(ID(:));       
+                    [indwl, indAng] = ind2sub(size(ID),I);
+                    k               = kurtosis(ID(indwl, :));
+                    if k < 2
                         continue;
                     end
-                    [indwl, indAng]         = ind2sub(size(ID),I);
+%                     if C < mean(ID(indwl,:)) + 2.5*std(ID(indwl,:))
+%                         continue;
+%                     end
+                    %                     if C < mean(ID, [1,2]) + 2*std(ID, [], 'all')
+                    %                         continue;
+                    %                     end
                     image_orientation(i, j) = mod(orientation(indAng)+angle_compens, 180) - 90;
                     image_wavelength(i, j)  = wavelength(indwl);
+                    kurtosis_map(i,j) = (C - mean(ID(indwl,:))) / std(ID(indwl,:));
+%                     kurtosis_map(i,j) = k;
                     % sum up ID
                     if size(ID)==size(ID_sum)
                         ID_sum = ID_sum + ID;
@@ -7288,23 +8424,23 @@ classdef class_process_RFdata
             %             disp([num2str(mean(image_orientation, 'all', 'omitnan')) ...
             %                 ' + ' num2str(std(image_orientation, 0, 'all', 'omitnan'))]);
             %************************* Gaussian fitting ********************
-            Idof_edge    = 0:180;
-            Idof_N       = histcounts(image_orientation, Idof_edge);
-            centers      = [0 45 90 135];
-            sigmas       = [8 8 8 8];
-            amplitudes   = [1 1 1 1];
+            Idof_edge = -90:90;
+            Idof_N    = histcounts(image_orientation, Idof_edge);
+            %             centers      = [0 45 90 135];
+            %             sigmas       = [8 8 8 8];
+            %             amplitudes   = [1 1 1 1];
             %             centers      = [45 90 135];
             %             sigmas       = [8 8 8];
             %             amplitudes   = [1 1 1];
-            numGaussians = 4;
-            [amp, parameter, ~] = fx_multi_Gaussianfitting(...
-                numGaussians, Idof_edge(1:180), Idof_N, centers, sigmas, amplitudes);
-            [~, amp_I]      = max(amp'.*parameter(2:2:end));
-            m_fiber_angle   = parameter(amp_I*2-1);
-            %             std_fiber_angle = amp(amp_I);
-            %
-            std_fiber_angle = std(image_orientation, 0, 'all','omitnan');
-            disp(['mean:' num2str(m_fiber_angle) '. std:' num2str(std_fiber_angle)]);
+            %             numGaussians = 4;
+            %             [amp, parameter, ~] = fx_multi_Gaussianfitting(...
+            %                 numGaussians, Idof_edge(1:180), Idof_N, centers, sigmas, amplitudes);
+            %             [~, amp_I]      = max(amp'.*parameter(2:2:end));
+            %             m_fiber_angle   = parameter(amp_I*2-1);
+            %             %             std_fiber_angle = amp(amp_I);
+            %             %
+            %             std_fiber_angle = std(image_orientation, 0, 'all','omitnan');
+            %             disp(['mean:' num2str(m_fiber_angle) '. std:' num2str(std_fiber_angle)]);
             % ********** plot 1D distribution
             % normalize
             Idof_N = Idof_N / sum(Idof_N);
@@ -7542,7 +8678,7 @@ classdef class_process_RFdata
             obj.PropertyName_LG       = PropertyName;
             % start
             gaborArray                = gabor(wavelength, orientation, ...
-                'SpatialFrequencyBandwidth', 1, 'SpatialAspectRatio', 0.7);
+                'SpatialFrequencyBandwidth', 1.5, 'SpatialAspectRatio', 0.2);
             row_ga                    = length(wavelength);
             col_ga                    = length(orientation);
             wl_max                    = round(max(wavelength)/2);
@@ -7594,10 +8730,10 @@ classdef class_process_RFdata
                         ID     = squeeze(gaborMagnitude(ii, jj, :));
                         ID     = reshape(ID, [row_ga, col_ga]);
                         [C, I] = max(ID(:));
-                        if C <= mean(ID,'all') + std(ID, 0, 'all') % no significate maximum, thus skip
+                        if C <= mean(ID,'all') + 0*std(ID, 0, 'all') % no significate maximum, thus skip
                             continue;
                         end
-                        [~, indAng] = ind2sub(size(ID),I);
+                        [~, indAng] = ind2sub(size(ID), I);
                         if i==1
                             upper_index_bound = index_container(ii, jj);
                             lower_index_bound = round(index_container(ii, jj)/2 ...
@@ -7631,6 +8767,7 @@ classdef class_process_RFdata
             obj.Inplane_direction_3D_overall_ID = Inplane_direction_overall;
             obj.ID_sum_overall_ID               = ID_sum_all;
         end
+        
         
         function obj = extract_local_orientation_3D_plywise_allwl(obj, PropertyName, wavelength, orientation, ratios, plies, K, sigma_curvelet)
             % extract the local orientation image in each ply
@@ -7745,7 +8882,7 @@ classdef class_process_RFdata
                             % wavelength is min:2:max!!
                             %                             ID_bound = min(round(min(distances)), wavelength(end));
                             ID_bound = round(sqrt(distances_pow_2(ii, jj)));
-                            if ID_bound <= 4
+                            if ID_bound <= 8
                                 continue;
                             elseif ID_bound < wl_max || ... % consider the edge of the whole image
                                     ii < wl_max || jj < wl_max  || lx-ii < wl_max || ly-jj < wl_max
@@ -7897,7 +9034,9 @@ classdef class_process_RFdata
             x_row = obj.row(mask) / obj.fx * 1e3;
             x_col = obj.col(mask) / obj.fy * 1e3;  % / obj.fy * 1e3 ;
             x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
-            if sum(isnan(obj.front_I))~=0
+            if sum(isnan(obj.front_I), 'all')==0
+                inph_ex(:,:,1:mean(obj.front_I, 'all')-50) = nan;
+                inph_ex(:,:,mean(obj.rear_I, 'all')+50:end) = nan;
                 h1 = scatter3(xslice * ones(1, size(inph_ex, 1)), ...
                     y, obj.front_I(:, x_idx)/ obj.fs * 1e3 * 3000/2, ...
                     3, 'black', 'filled', 'DisplayName','Front surface');
@@ -7919,6 +9058,7 @@ classdef class_process_RFdata
                     obj.rear_I(y_idx, :)/ obj.fs * 1e3 * 3000/2, ...
                     3, [0.75 0.75 0.75], 'HandleVisibility','off');
                 hold on;
+                legend([h1 h2], 'Front surface', 'Rear surface');
             end
             % the 1st dimension is length(radius)
             if size(size(inph_ex))==4  % check dims
@@ -7940,8 +9080,8 @@ classdef class_process_RFdata
                     set(gca, 'ZDir', 'reverse');
                 end
             else
-                %                 z         = (0: size(inph_ex, 3) - 1) / obj.fs * 1e3 * 3000/2;
-                z         = (0: size(inph_ex, 3) - 1) / obj.fs * 1e6; % time axis, unit: us
+%                 z         = (0: size(inph_ex, 3) - 1) / obj.fs * 1e6; % time axis, unit: us
+                z         = (0: size(inph_ex, 3) - 1)/ obj.fs * 1e3 * 3000/2; % depth axis
                 [X, Y, Z] = meshgrid(x, y, z);
                 h         = slice(ax, X, Y, Z, inph_ex , xslice, yslice, zslice);
                 hold on;
@@ -7964,7 +9104,6 @@ classdef class_process_RFdata
             ylim([y(1) y(end)]);
             %             legend([h3 h1 h2], 'Interply track', 'Front surface', 'Rear surface');
             %             ** Uncommnet for non-interply demp!
-            legend([h1 h2], 'Front surface', 'Rear surface');
             xlim([0 x(end)]);
             ylim([0 y(end)]);
             %             zlim([0.8 7]);
@@ -8403,27 +9542,33 @@ classdef class_process_RFdata
             x       = (1:(win(end)-win(1)+1))/obj.fx * 1e3;
             y       = (1:(win(end)-win(1)+1))/obj.fy * 1e3;
             z       = (1:size(dataset, 3))/obj.fs * 1e3 * 3000/2;
-            cf      = figure('Name', ['B_scan_angles_', B_type, '_', num2str(win(end))]);
-            set(cf, 'Position', [0, 0, length(win)*2, 1200], 'color', 'white');
+            cf1     = figure('Name', ['B_scan_angles_', B_type, '_side_', num2str(win(end))]);
+            set(cf1, 'Position', [0, 0, 600, 600], 'color', 'white');
+%             set(cf1, 'Position', [0, 0, length(win)*2, 600], 'color', 'white');
+            cf2     = figure('Name', ['B_scan_angles_', B_type, '_top_', num2str(win(end))]);
+            set(cf2, 'Position', [0, 0, 600, 600], 'color', 'white');
             % make vedio
             axis tight manual;
             title(['y =' num2str(0/obj.fy * 1e3) ' mm']);
             xlabel('\fontname {times new roman} x (mm)', 'fontsize', 16);
             ylabel('\fontname {times new roman} z (mm)', 'fontsize', 16);
-            v = VideoWriter([property_name, '.avi']);
-            open(v);
+            v1 = VideoWriter([property_name, 'side.avi']);
+            v1.FrameRate = 3;
+            v2 = VideoWriter([property_name, 'top.avi']);
+            v2.FrameRate = 3;
+            open(v1);
+            open(v2);
             %
             if (B_type == 'x')
                 for index = 1:size(dataset,1)
                     % B scan image
                     % side view
                     B_scan = squeeze(dataset(index, win, :));
-                    figure(cf);
-                    ca1 = subplot(2, 1, 1);
+                    figure(cf1);
                     % imagesc(x, z, B_scan');
                     pcolor(x, z, B_scan');
                     shading flat;
-                    set(ca1, 'ydir', 'reverse');
+                    set(gca, 'ydir', 'reverse');
                     hold on;
                     title(['y =' num2str(index/obj.fy * 1e3) ' mm']);
                     xlabel('\fontname {times new roman} x (mm)', 'fontsize', 16);
@@ -8431,7 +9576,7 @@ classdef class_process_RFdata
                     mask  = (obj.row==index) & obj.col>=win(1) & obj.col<=win(end);
                     x_row = obj.col(mask) / obj.fx * 1e3;
                     x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
-                    h1 = scatter(ca1, x_row, x_dep, ...
+                    h1 = scatter(x_row, x_dep, ...
                         3,  [122 122 121]/255, 'filled', ...
                         'DisplayName','Interply track');
                     hold on;
@@ -8445,19 +9590,22 @@ classdef class_process_RFdata
                     hold on;
                     % figure setup
                     colormap(hsv);
-                    caxis(ca1, [-90 90]);
+                    caxis(gca, [-90 90]);
                     h = colorbar;
                     set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Angle (\circ)');
-                    set(ca1, 'Fontname', 'times new Roman');
-                    set(ca1, 'Fontsize', 16);
-                    set(ca1, 'Linewidth', 1.5);
+                    set(gca, 'Fontname', 'times new Roman');
+                    set(gca, 'Fontsize', 16);
+                    set(gca, 'Linewidth', 1.5);
+                    % frame vedio operation
+                    frame = getframe(cf1);
+                    writeVideo(v1, frame);
+                    clf(cf1);
                     % top view
-                    figure(cf);
-                    ca2     = subplot(2, 1, 2);
+                    figure(cf2);
                     % imagesc(x, z, B_scan');
-                    z_index     = round(mean(front_p, 'all', 'omitnan') ...
+                    z_index = round(mean(front_p, 'all', 'omitnan')...
                         + mean(bakc_p-front_p, 'all', 'omitnan') / size(dataset,1) * index);
-                    B_scan = squeeze(dataset(1:end, 1:end, z_index));
+                    B_scan  = squeeze(dataset(1:end, 1:end, z_index));
                     pcolor(x, y, B_scan);
                     shading flat;
                     hold on;
@@ -8467,21 +9615,54 @@ classdef class_process_RFdata
                     hold on;
                     % figure setup
                     colormap(hsv);
-                    caxis(ca2, [-90 90]);
+                    caxis(gca, [-90 90]);
                     h = colorbar;
                     set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Angle (\circ)');
-                    set(ca2, 'Fontname', 'times new Roman');
-                    set(ca2, 'Fontsize', 16);
-                    set(ca2, 'Linewidth', 1.5);
+                    set(gca, 'Fontname', 'times new Roman');
+                    set(gca, 'Fontsize', 16);
+                    set(gca, 'Linewidth', 1.5);
                     % frame vedio operation
-                    frame = getframe(cf);
-                    writeVideo(v, frame);
-                    clf(cf);
+                    frame = getframe(cf2);
+                    writeVideo(v2, frame);
+                    clf(cf2);
                 end
             elseif (B_type == 'y')
             end
         end
         
+        function statistic_angular_distribution(obj, angle_compens)
+            % count the angular distribution from 3D inplane_direction
+            inph_ex = obj.Inplane_direction_3D_ID;
+            %             front_I = obj.front_I;
+            [~, ~, lz] = size(inph_ex);
+            Idof_edge  = -90:90;
+            Idof_Ns    = nan(length(Idof_edge)-1, lz);
+            for i = 1:lz
+                image_orientation = inph_ex(:,:,i);
+                image_orientation = mod(image_orientation+angle_compens, 180) - 90;
+                Idof_N            = histcounts(image_orientation, Idof_edge);
+                Idof_Ns(:,i)      = Idof_N/sum(Idof_N);
+            end
+            front_I_ave = mean(obj.front_I, 'all', 'omitnan');
+            rear_I_ave  = mean(obj.rear_I, 'all', 'omitnan');
+            Idof_Ns     = circshift(Idof_Ns, -22, 1);
+            Idof_edge   = Idof_edge-22;
+            figure;
+            imagesc(Idof_edge, (1:lz)/obj.fs*1e6, Idof_Ns.');
+            colormap(jet);
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Normalized amp. (arb.)');
+            xlabel('\fontname {times new roman} Angle (degree)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} TOF (\mus)', 'fontsize', 16);
+            hold on;
+            line([Idof_edge(1), Idof_edge(end)], [front_I_ave/obj.fs*1e6; front_I_ave/obj.fs*1e6],...
+                'linestyle', '--', 'LineWidth', 2, 'Color', 'w');
+            hold on;
+            line([Idof_edge(1), Idof_edge(end)], [rear_I_ave/obj.fs*1e6; rear_I_ave/obj.fs*1e6],...
+                'linestyle', '--', 'LineWidth', 2, 'Color', 'w');
+            set(ax, 'fontsize', 16);
+            set(ax, 'linewidth', 1.5);
+        end
         % ************************ Global orientation extract ********************
         function obj = extract_gloabl_orientation_3D(obj, PropertyName, wavelength, orientation, ratios, max_layer, SFB, SAR, K)
             % extract the local orientation image in each ply
