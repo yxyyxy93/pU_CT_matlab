@@ -9,6 +9,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
         fft2d_mask_fingerprint
         % 3D ID 
         Inplane_direction_3D_ID_ztheta
+        Inplane_direction_3D_ID_wavelen
     end
     
     methods
@@ -1354,72 +1355,88 @@ classdef class_process_woven_RFdata < class_process_RFdata
             % start
             img_temp  = obj.(PropertyName);
             img_temp  = abs(img_temp(:, :, z_range(1): z_range(2)));
+            img_temp  = gpuArray(img_temp); % gpu
             [m, n, l] = size(img_temp); 
 %             m_np2     = nextpow2(m);
 %             n_np2     = nextpow2(n);    
 %             l_np2     = nextpow2(l);
-%             % Gaussian filter
-%             sigma       = [0.1 0.1 10];
-%             img_temp    = imgaussfilt3(img_temp, sigma);
-            Inplane_direction           = zeros([m, n, l]);
-            Inplane_direction_index_ori = zeros([m, n, l]);
-            Inplane_direction_index_zth = zeros([m, n, l]);
-            statistic_mean = zeros([m, n, l]);
-            statistic_std  = zeros([m, n, l]);
+            % Gaussian filter
+%             sigma    = [0.2 0.2 20];
+%             img_temp = imgaussfilt3(img_temp, sigma);
+            Inplane_direction           = gpuArray(zeros([m, n, l]));
+            Inplane_direction_index_ori = gpuArray(zeros([m, n, l]));
+            Inplane_direction_index_zth = gpuArray(zeros([m, n, l]));
+            Inplane_direction_index_wl  = gpuArray(zeros([m, n, l]));
+            stati
+            \stic_mean = gpuArray(zeros([m, n, l]));
+            statistic_std  = gpuArray(zeros([m, n, l]));
             SFB = 1.5;
             SAR = 0.5;
             %
             disp('convolution calculation...');
             for i = 1:length(orientation)
                 for j = 1:length(z_theta)
-                    h       = fx_handwritten_3DGabor(orientation(i), wl, z_theta(j), SFB, SAR);
-                    %                     fftSize = [2^m_np2, 2^n_np2, 2^l_np2];
-                    size_h = size(h);
-                    fftSize = size_h + [m n l] - 1;
-                    A_k = ifftn( fftn(img_temp, fftSize) .* fftn(real(h), fftSize), 'symmetric' );
-                    A_k = imgaussfilt3(A_k, K* 0.5*wl);
-                    A_k = A_k(end/2-m/2+1:end/2+m/2, ...
-                        end/2-n/2+1:end/2+n/2, ...
-                        end/2-l/2+1:end/2+l/2);
-                    statistic_mean = statistic_mean + A_k;
-                    statistic_std  = statistic_std + A_k.^2;
-                    %                     A_k = A_k(wl+1:end-wl, wl+1:end-wl, :);
-                    %               A_k = A_k(end/2-m/2+wavelength+1:end/2+m/2-wavelength, ...
-                    %                         end/2-n/2+wavelength+1:end/2+n/2-wavelength, ...
-                    %                         end/2-l/2+wavelength+1:end/2+l/2-wavelength);
-                    % update the maximum
-                    compare = A_k>=Inplane_direction; % logic larger or not
-                    Inplane_direction_index_ori = Inplane_direction_index_ori.*(1-compare) + i.*compare;
-                    Inplane_direction_index_zth = Inplane_direction_index_zth.*(1-compare) + j.*compare;
-                    Inplane_direction = Inplane_direction .*(1-compare) + A_k.*compare;
-%                     compare = A_k>=Inplane_direction(wl+1:end-wl, wl+1:end-wl, :); % logic larger or not
-%                     Inplane_direction_index_ori(wl+1:end-wl, wl+1:end-wl, :)...
-%                         = Inplane_direction_index_ori(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + i.*compare;
-%                     Inplane_direction_index_zth(wl+1:end-wl, wl+1:end-wl, :)...
-%                         = Inplane_direction_index_zth(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + j.*compare;
-%                     Inplane_direction(wl+1:end-wl, wl+1:end-wl, :)...
-%                         = Inplane_direction(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + A_k.*compare;
+                    for w = 1:length(wl)
+                        thetas = [orientation(i), 0, z_theta(j)];
+                        h      = fx_handwritten_3DGabor(thetas, wl(w), SFB, SAR);
+                        h      = gpuArray(h); % gpu
+                        %  fftSize = [2^m_np2, 2^n_np2, 2^l_np2];
+                        size_h = size(h);
+                        fftSize = size_h + [m n l] - 1;
+                        A_k = ifftn( fftn(img_temp, fftSize) .* fftn(real(h), fftSize), 'symmetric' );
+                        A_k = A_k ./ wl(w)^3;% normalization
+                        A_k = gpuArray(A_k); % gpu
+                        A_k = imgaussfilt3(A_k, [K* 0.1*wl(w) K* 0.1*wl(w) K* 0.5*wl(w)]);
+                        A_k = A_k(end/2-m/2+1:end/2+m/2, ...
+                            end/2-n/2+1:end/2+n/2, ...
+                            end/2-l/2+1:end/2+l/2);
+                        statistic_mean = statistic_mean + A_k;
+                        statistic_std  = statistic_std + A_k.^2;
+                        %                     A_k = A_k(wl+1:end-wl, wl+1:end-wl, :);
+                        %               A_k = A_k(end/2-m/2+wavelength+1:end/2+m/2-wavelength, ...
+                        %                         end/2-n/2+wavelength+1:end/2+n/2-wavelength, ...
+                        %                         end/2-l/2+wavelength+1:end/2+l/2-wavelength);
+                        % update the maximum
+                        compare = A_k>=Inplane_direction; % logic larger or not
+                        Inplane_direction_index_ori = Inplane_direction_index_ori.*(1-compare) + i.*compare;
+                        Inplane_direction_index_zth = Inplane_direction_index_zth.*(1-compare) + j.*compare;
+                        Inplane_direction_index_wl  = Inplane_direction_index_wl.*(1-compare) + w.*compare;
+                        Inplane_direction = Inplane_direction .*(1-compare) + A_k.*compare;
+                        %                     compare = A_k>=Inplane_direction(wl+1:end-wl, wl+1:end-wl, :); % logic larger or not
+                        %                     Inplane_direction_index_ori(wl+1:end-wl, wl+1:end-wl, :)...
+                        %                         = Inplane_direction_index_ori(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + i.*compare;
+                        %                     Inplane_direction_index_zth(wl+1:end-wl, wl+1:end-wl, :)...
+                        %                         = Inplane_direction_index_zth(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + j.*compare;
+                        %                     Inplane_direction(wl+1:end-wl, wl+1:end-wl, :)...
+                        %                         = Inplane_direction(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + A_k.*compare;
+                    end
                 end
                 clc;
                 fprintf('ID searching progress: %0.2f%%\n',100*i/length(orientation));
             end
             % statistic
-            N = length(orientation)*length(z_theta);
+            N = length(orientation)*length(z_theta)*length(wl);
             statistic_mean = statistic_mean ./ N;
-            statistic_std  = sqrt( (statistic_std - statistic_mean.^2*N)/(N-1) );      
+            statistic_std  = sqrt( (statistic_std - N*statistic_mean.^2)/(N-1) );      
             % remove extra parts
-            Inplane_direction_index_ori(1:wl, :, :) = nan;
-            Inplane_direction_index_ori(:, 1:wl, :) = nan;
-            Inplane_direction_index_ori(end-wl:end, :, :) = nan;
-            Inplane_direction_index_ori(:, end-wl:end, :) = nan;
-            Inplane_direction_index_zth(1:wl, :, :) = nan;
-            Inplane_direction_index_zth(:, 1:wl, :) = nan;
-            Inplane_direction_index_zth(end-wl:end, :, :) = nan;
-            Inplane_direction_index_zth(:, end-wl:end, :) = nan;
+            wl = wl(end);
+            Inplane_direction_index_ori(1:wl-1, :, :) = nan;
+            Inplane_direction_index_ori(:, 1:wl-1, :) = nan;
+            Inplane_direction_index_ori(end-wl+1:end, :, :) = nan;
+            Inplane_direction_index_ori(:, end-wl+1:end, :) = nan;
+            Inplane_direction_index_zth(1:wl-1, :, :) = nan;
+            Inplane_direction_index_zth(:, 1:wl-1, :) = nan;
+            Inplane_direction_index_zth(end-wl+1:end, :, :) = nan;
+            Inplane_direction_index_zth(:, end-wl+1:end, :) = nan;
             % statistic removement
-            statistic_mean_remove = Inplane_direction<statistic_mean + statistic_std .* 1.5;
+            statistic_mean_remove = Inplane_direction<statistic_mean + statistic_std .* 2;
+%             temp = Inplane_direction_index_ori;
+%             temp(statistic_mean_remove) = nan;
+%             temp = gather(temp);
+%             fx_Scrollable_3d_view(temp);
             Inplane_direction_index_ori(statistic_mean_remove) = nan;
             Inplane_direction_index_zth(statistic_mean_remove) = nan;
+            Inplane_direction_index_wl(statistic_mean_remove) = nan;
 %             [m,n,p] = size(Inplane_direction_index_ori);
 %             rear_I_temp = obj.rear_I;
 %             front_I_temp = obj.front_I;
@@ -1431,8 +1448,16 @@ classdef class_process_woven_RFdata < class_process_RFdata
 %                     end
 %                 end
 %             end     
-            obj.Inplane_direction_3D_ID = Inplane_direction_index_ori / length(orientation) * 180;
-            obj.Inplane_direction_3D_ID_ztheta = Inplane_direction_index_zth / length(orientation) * 180; 
+            obj.Inplane_direction_3D_ID = gather(Inplane_direction_index_ori / length(orientation) * 180);
+            obj.Inplane_direction_3D_ID_ztheta = gather(Inplane_direction_index_zth);
+            obj.Inplane_direction_3D_ID_wavelen = gather(Inplane_direction_index_wl);
+            clear img_temp;
+            clear h;
+            clear A_k;
+             clear Inplane_direction_index_zth;
+            clear Inplane_direction_index_ori;
+            clear Inplane_direction_index_wl;
+            clear Inplane_direction;
         end
         
         function obj = extract_local_orientation_3DID_plane(obj, PropertyName, wavelength, y_ori, z_ori, z_range, K)
@@ -1462,10 +1487,10 @@ classdef class_process_woven_RFdata < class_process_RFdata
                 for j = 1:length(z_ori)
                     y_theta = 90 + y_ori(i);
                     z_theta = z_ori(j);
-                    thetas = [x_theta, y_theta, z_theta];
+                    thetas  = [x_theta, y_theta, z_theta];
                     h = fx_handwritten_3DGabor_plane(thetas, wavelength, SFB, SAR);
                     fftSize = size(img_temp);
-                    A_k   = ifftn( fftn(img_temp, fftSize) .* fftn(real(h), fftSize), 'symmetric' );
+                    A_k = ifftn( fftn(img_temp, fftSize) .* fftn(real(h), fftSize), 'symmetric' );
                     A_k = imgaussfilt3(A_k, K* 0.5*wavelength);
                     % update the maximum
                     compare = A_k>=Inplane_direction; % logic larger or not

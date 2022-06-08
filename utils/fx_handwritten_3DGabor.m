@@ -1,9 +1,9 @@
-function h = fx_handwritten_3DGabor(orientation, wl, z_theta, SFB, SAR)
+function h = fx_handwritten_3DGabor(thetas, wl, SFB, SAR)
        % sigma
     sigma  = wl/pi*sqrt(log(2)/2)*(2^SFB+1)/(2^SFB-1);
     SigmaX = sigma;
     SigmaY = sigma ./ SAR;
-    SigmaZ = sigma ./ SAR;
+    SigmaZ = sigma * SAR;
     
     % SpatialKernel
     rx = ceil(7*SigmaX);
@@ -19,7 +19,6 @@ function h = fx_handwritten_3DGabor(orientation, wl, z_theta, SFB, SAR)
 %     X_prime = X .* cosd(orientation) - Y .*sind(orientation);
 %     Y_prime = X .* sind(orientation) + Y .*cosd(orientation);
 %     Z_prime = Z;
-	thetas = [orientation, 0, z_theta];
 	R = rotation(thetas);
     Z_prime = Z * R(1,1) + Y * R(1,2) + X * R(1,3);
     Y_prime = Z * R(2,1) + Y * R(2,2) + X * R(2,3);

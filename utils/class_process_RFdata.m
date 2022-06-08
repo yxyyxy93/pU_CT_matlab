@@ -9021,7 +9021,7 @@ classdef class_process_RFdata
             % ***
             inph_ex = obj.Inplane_direction_3D_ID;
             inph_ex = mod(inph_ex + angle_compens, 180) - 90;
-            inph_ex = medfilt3(inph_ex, mfsize);
+%             inph_ex = medfilt3(inph_ex, mfsize);
             y       = (0: size(inph_ex, 1) - 1) / obj.fx * 1e3;
             x       = (0: size(inph_ex, 2) - 1) / obj.fy * 1e3;
             % ******************** show ply tracks
@@ -9035,8 +9035,8 @@ classdef class_process_RFdata
             x_col = obj.col(mask) / obj.fy * 1e3;  % / obj.fy * 1e3 ;
             x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
             if sum(isnan(obj.front_I), 'all')==0
-                inph_ex(:,:,1:mean(obj.front_I, 'all')-50) = nan;
-                inph_ex(:,:,mean(obj.rear_I, 'all')+50:end) = nan;
+                inph_ex(:,:,1:round(mean(obj.front_I, 'all')-50)) = nan;
+                inph_ex(:,:,round(mean(obj.rear_I, 'all')+50):end) = nan;
                 h1 = scatter3(xslice * ones(1, size(inph_ex, 1)), ...
                     y, obj.front_I(:, x_idx)/ obj.fs * 1e3 * 3000/2, ...
                     3, 'black', 'filled', 'DisplayName','Front surface');
@@ -9111,7 +9111,6 @@ classdef class_process_RFdata
             view([15 65 40]);
             %             zlim([0 3]);
             %             zlim([1 5.5])
-            %             view([15 45 30]);
             %              % ************ Inplane_orientation_3D_overall ******
             %             inph_ex   = obj.Inplane_direction_3D_overall_ID;
             %             y         = (0: size(inph_ex, 1) - 1) / obj.fx * 1e3;
@@ -9660,8 +9659,8 @@ classdef class_process_RFdata
             hold on;
             line([Idof_edge(1), Idof_edge(end)], [rear_I_ave/obj.fs*1e6; rear_I_ave/obj.fs*1e6],...
                 'linestyle', '--', 'LineWidth', 2, 'Color', 'w');
-            set(ax, 'fontsize', 16);
-            set(ax, 'linewidth', 1.5);
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 1.5);
         end
         % ************************ Global orientation extract ********************
         function obj = extract_gloabl_orientation_3D(obj, PropertyName, wavelength, orientation, ratios, max_layer, SFB, SAR, K)

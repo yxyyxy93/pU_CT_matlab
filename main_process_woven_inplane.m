@@ -28,7 +28,7 @@ process3.fy = 1 / 0.2e-3; % unit: 1 / m
 process3 = process3.read_origin_data; % read (reset) the dataset
 
 %% ***********
-FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Woven_samples\";   % the destination folder
+FolderName = "F:\Xiayang\results\Woven_samples\";   % the destination folder
 save(strcat(FolderName, Filename1(1:end-4), 'mat'), '-v7.3');
 
 load(strcat(FolderName, '20220428_BP1_3_025m_V313_25db_PEmat.mat'));
@@ -114,6 +114,8 @@ close all;
 
 process3.smooth_rear_I;
 process3.show_surfaces(filename_fig(1:end-5));
+
+process3 = process3.recover_surface;
 
 %% normal time window
 PropertyName = 'img_hil';
@@ -597,11 +599,11 @@ process3.show_inplane_direction_3D_ID(xslice, yslice, zslice, mfsize, angle_comp
 %% 3D information Diagram
 PropertyName  = 'img_hil';
 
-wavelength  = 10;
-orientation = 0:5:180; % degree
-SFB         = 1.5;       % [0.5 2.5]
+wavelength  = 8:1:12;
+orientation = 0:1:180; % degree
+SFB         = 2;       % [0.5 2.5]
 SAR         = 0.5;     % [0.23 0.92]
-z_theta     = 0;
+z_theta     = 0:5:60;
 K           = 1;   
 z_range     = [1 1200];
 %
