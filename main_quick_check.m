@@ -7,10 +7,14 @@ clear;
 
 %% ***********
 FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Impact_damaged_sample\";   % the destination folder
-save(strcat(FolderName, Filename1(1:end-4), 'mat'), '-v7.3');
+save(strcat(FolderName, Filename1(1:end-4), '.mat'), '-v7.3');
 
-load(strcat(FolderName, '14122020_12h08m51s.mat'));
+Filename1 = '04062020_15h49m34s_PE.mat';
+load(strcat(FolderName, Filename1));
 % '20220207_BP1_3_025m_V313_25db_PEmat.mat'
+% 14122020_12h08m51s.mat
+% CFRP-2-07122020_12h07m41s.mat
+% 04062020_15h49m34s_PE
 
 %% Define the class
 % read the preprocessed .mat
@@ -18,8 +22,13 @@ load(strcat(FolderName, '14122020_12h08m51s.mat'));
 filename               = strcat(Pathname1, Filename1);
 process3               = class_process_woven_RFdata(filename);
 
-% input the settings 
-process3.fs = 250e6; % MHz
+% % input the settings 
+% process3.fs = 250e6; % MHz
+% process3.fx = 1 / 0.25e-3; % unit: 1 / m
+% process3.fy = 1 / 0.25e-3; % unit: 1 / m
+
+% for CFRP-2-07122020_12h07m41smat
+process3.fs = 125e6; % MHz
 process3.fx = 1 / 0.25e-3; % unit: 1 / m
 process3.fy = 1 / 0.25e-3; % unit: 1 / m
 
@@ -29,7 +38,7 @@ process3.fy = 1 / 0.25e-3; % unit: 1 / m
 % % % read the data from the struct, or reset the dataset
 % process3     = process3.loadSettings(settinig_file);
 
-process3     = process3.read_origin_data; % read (reset) the dataset
+process3      = process3.read_origin_data; % read (reset) the dataset
 
 sampling_rate = 1;
 
@@ -40,74 +49,79 @@ y_step   = 3;
 process3 = process3.cut_edges(window, x_step, y_step);
 process3.show_img_shape;
 
-%% original results display
-xslice = 78 / process3.fx * 1e3;
-yslice = 72 / process3.fy * 1e3;
-zslice = 600 / process3.fs * 1e3 * 3000/2; % mm
+%% show C-scan
+z = 1200;
+PropertyName = 'img';
 
-process3.show_Raw_filtered_3D(xslice, yslice, zslice)
+process3.show_Cscan(z, PropertyName);
 
 %% time varying gain
 process3 = process3.read_origin_data; % read (reset) the dataset
-ratio    = 1500;
+ratio    = 10e3;
 process3 = process3.time_varying_gain(ratio);
 
 %% show A scan
 % define the index to select Ascan 
-x   = 55;
-y   = 75;
+x   = 2;
+y   = 2;
 % process3.demo_AS_3D_inclinfq(x, y);
 process3.show_hilbert_Ascan(x, y);
 
-noises_dBW = [-30 -20 -10];
+%% show A scan - noise
+close all;
+
+x   = 10;
+y   = 10;
+noises_snr = [20 10 5];
 seed       = 1;
-process3.show_Ascan_addnoise(x, y, noises_dBW, seed);
+max_len    = 1200;
+process3.show_Ascan_addnoise(x, y, noises_snr, seed, max_len);
 
 %% show A scan - sampling rate
-x   = 32;
-y   = 68;
+close all;
 
-samling_rates = [250/50 250/25 250/20];
-process3.show_Ascan_resample(x, y, samling_rates)
+x   = 10;
+y   = 10;
+max_len = 1200;
+
+% samling_rates = [250/25 250/15];
+samling_rates = [125/125 125/25 125/20 125/15];
+process3.show_Ascan_resample(x, y, samling_rates, max_len)
+
+%% show A scan - sampling rate and added noise
+close all;
+
+x   = 10;
+y   = 10;
+max_len = 1200;
+
+% samling_rates = [250/25];
+noises_snr = [10 20];
+sampling_rates = [125/20];
+
+process3.show_Ascan_resample_addnoise(x, y, sampling_rates, noises_snr, max_len)
 
 %% read reference signal
 [Filename1, Pathname1] = uigetfile({'*.tdms'},  'select the file');   
 filename               = strcat(Pathname1, Filename1);
-x                      = 10;
-y                      = 10;
-process3               = process3.read_refer(filename, x, y);
+x        = 10;
+y        = 10;
+process3 = process3.read_refer(filename, x, y);
 
 % cut the ref. signal
-win                    = [0.1e-6 3.5e-6]; % unit: s
-process3               = process3.cut_reference_signal(win);
+win      = [1e-6 2.3e-6]; % unit: s
+process3 = process3.cut_reference_signal(win);
 
 % align the signal
-process3               = process3.align_refer_ascan(x, y); 
+process3 = process3.align_refer_ascan(x, y); 
 
+% process3.show_reference_signal;
+       
 %% show A scan - different center frequencies
 x   = 55;
 y   = 75;
 Fcs = [4, 3, 2] * 1e6;
 process3.show_Ascan_freqManipulation(x, y, Fcs)
-
-%% add noise
-% process3 = process3.read_origin_data; % read (reset) the dataset
-% process3 = process3.cut_edges(window, x_step, y_step);
-% snr      = 15;
-% process3 = process3.addnoise(snr);
-close all;
-dBW      = -10;
-seed     = 1;
-process3 = process3.addnoise_bydBW(dBW);
-
-%% downsample dataset
-% process3 = process3.read_origin_data; % read (reset) the dataset
-% process3 = process3.cut_edges(window, x_step, y_step);
-% snr      = 15;
-% process3 = process3.addnoise(snr);
-close all;
-sampling_rate = 250/20;
-process3      = process3.data_downsample(sampling_rate);
 
 %% frequency manipulation dataset
 clc;
@@ -116,12 +130,22 @@ Fc            = 5e6;
 process3      = process3.data_freqManipulation(Fc);
 sampling_rate = 1; % for reset the sampling_rate
 
+%% show A scan - 2nd fft
+close all;
+process3.show_Ascan_2dfft(20:20:200, 20:20:200, max_len);
+
+%% show A scan - time gate 
+max_len = 1200;
+process3.show_Ascan_timegate([5 110 150 270], [5 110 150 220], max_len);
+
+% 20220612: [5 100 140], [5 100 140]
+
 %% surface search one signal
 global min_pks 
 min_pks      = 0.5;
 % PropertyName = 'img_hil_filter';
-% PropertyName = 'img_hil';
-PropertyName = 'img_hil_noise';
+PropertyName = 'img_hil';
+% PropertyName = 'img_hil_noise';
 % process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
 clc;
 close all;
@@ -150,34 +174,6 @@ process3.show_surfaces(filename_fig(1:end-5));
 flag = 1; % using depth property % flag==1: using front and back surface to calculate
 process3.damage_depth_imaging(flag);
 
-%% deconvolution
-clc
-x = 140;
-y = 140;
-
-q_factor    = 1e-4;
-q_factor_AR = 1e-4;
-fft_padding = 2^11;
-f1          = 3e6;
-f2          = 7e6;
-bw          = [f1 f2];
-bwr         = -3:-0.5:-6;
-k           = 15;
-lam         = 0.01;
-ker_wid     = 200;
-Nit         = 45;
-DownRate    = 1;
-fig_subname = '2-CEH105-24-p4_5MHz';
-process3.demo_deconvolutions(x, y, q_factor, q_factor_AR, ...
-    fft_padding, bw, bwr, k, lam, ker_wid, DownRate, Nit, fig_subname);
-
-%%
-% process3  = process3.apply_deconvolutions(q_factor, ...
-%     q_factor_AR, fft_padding, bw, bwr, k, ker_wid);
-process3      = process3.apply_deconvolutions_onlyWiener(q_factor, ker_wid);
-
-% save('process2.mat','process2');
-
 %% low pass filter
 % PropertyName = 'img_hil';
 % PropertyName = 'img_hil_noise';
@@ -188,30 +184,65 @@ bandpassFreq = 2 * Fc;
 process3     = process3.Filter_lowpass(bandpassFreq, PropertyName, sampling_rate);
 
 %% normal time window
-delay        = 60;
-max_len      = 1500;
-flag         = 1;
-front_I_max  = 500;
+% close all;
+
+flag = 0;
+% % for 2-CEH105-24-p5-6-030m_GEH5M
+% delay        = 60;
+% max_len      = 1500;
+% front_I_max  = 500; 
+% for CFRP-2-07122020_12h07m41smat
+% delay       = 31;
+delay       = 40;
+max_len     = 1200;
+front_I_max = 1200; 
+
 % PropertyName = 'img_hil_filter';
 % PropertyName = 'img_hil_noise';
 PropertyName = 'img_hil';
 % PropertyName = 'img_WienerDeconv';
-process3.find_damage_timewin(PropertyName, max_len, flag, delay, front_I_max, sampling_rate);
+process3 = process3.find_damage_timewin(PropertyName, max_len, flag, delay, front_I_max, sampling_rate);
 
-%%
-temp = process3.img;
-temp = fft(temp, [], 3);
-temp = abs(temp(:, :, 1:end/2));
-temp = fft(temp, [], 3);
-temp = abs(temp(:,:,1:end/2));
-fx_Scrollable_3d_view(temp);
+%% draw arbitary shape and statistic
+temp = process3.depth_2D;
+figure; ca = subplot(1, 1, 1);
+imagesc(ca, temp); 
+colormap(jet);
+caxis([0 6]);
+% [xi,yi] = getpts(ca);
+% BW = poly2mask(xi,yi, size(temp, 1), size(temp, 2));
+
+%
+temp1 = temp;
+temp1(~BW) = nan;
+
+figure;
+pcolor(temp1(end:-1:1, :));
+shading flat;
+hold on; colormap jet;
+caxis([0.8 1]);
+h = colorbar;
+set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
+axis off;
+% %
+% nbins  = 20;
+% edges  = linspace(0.85, 1, nbins);
+% Idof_N = histcounts(temp1(:), edges);
+% figure('Name', ['depth_distribution_ID_2dfft_reference']);
+% set(gcf, 'Position', [0, 0, 800, 400], 'color', 'white');
+% h1 = bar(edges(2:end), Idof_N/sum(Idof_N), 'BarWidth', 1);
+
+mean_1 = mean(temp(BW), 'omitnan');
+std_1  = std(temp(BW), 'omitnan');
+disp(mean_1);
+disp(std_1);
 
 %% check 2 times fft
 % close all;
 clc;
 
-x = 25 * process3.fx / 1e3;
-y = 35 * process3.fy / 1e3;
+x = 8 * process3.fx / 1e3;
+y = 80 * process3.fy / 1e3;
 % x = 55;
 % y = 75;
 
@@ -230,11 +261,11 @@ L = 2*L;
 
 % DynamicGate = exp((1:L)/L);
 % temp        = temp .* DynamicGate.';
-% figure,
-% % t_space = 1/Fs:1/Fs:L/Fs;
-% plot(temp, 'LineWidth', 2);
-% hold on;
-% plot(abs(hilbert(temp)), 'LineWidth', 2);
+figure,
+% t_space = 1/Fs:1/Fs:L/Fs;
+plot(temp, 'LineWidth', 2);
+hold on;
+plot(abs(temp), 'LineWidth', 2);
 
 temp_fft = fft(temp, L);
 temp_fft = temp_fft(1:round(end/2));
@@ -244,22 +275,22 @@ temp_fft_abs = abs(temp_fft);
 % temp_fft_abs = diff(temp_fft_abs, 1) ./ temp_fft_abs(2:end);
 temp_fft_max = max(temp_fft_abs);
 
-% *********** wavelet ************
-wv = 'db3';
-[c,l] = wavedec(temp_fft_abs, 4, wv);
-% remove a4
-c(1:l(1))    = 0 * c(1:l(1));
-c(l(1):l(2)) = 0 * c(l(1):l(2));
-c(l(2):l(3)) = 1 * c(l(2):l(3));
-temp_rec = waverec(c, l, wv);
-figure,
-plot(temp_fft_abs, 'LineWidth', 2, 'DisplayName', 'spectrum');
-hold on;
-plot(temp_rec, 'LineWidth', 2, 'DisplayName', 'wavelet rec.');
-hold on;
-plot(diff(temp_fft_abs), 'LineWidth', 2, 'DisplayName', 'diff');
-temp_fft_abs = temp_rec;
-% ***********************
+% % *********** wavelet ************
+% wv = 'db3';
+% [c,l] = wavedec(temp_fft_abs, 4, wv);
+% % remove a4
+% c(1:l(1))    = 0 * c(1:l(1));
+% c(l(1):l(2)) = 0 * c(l(1):l(2));
+% c(l(2):l(3)) = 1 * c(l(2):l(3));
+% temp_rec = waverec(c, l, wv);
+% figure,
+% plot(temp_fft_abs, 'LineWidth', 2, 'DisplayName', 'spectrum');
+% hold on;
+% plot(temp_rec, 'LineWidth', 2, 'DisplayName', 'wavelet rec.');
+% hold on;
+% plot(diff(temp_fft_abs), 'LineWidth', 2, 'DisplayName', 'diff');
+% temp_fft_abs = temp_rec;
+% % ***********************
 
 % temp_fft_abs(temp_fft_abs<temp_fft_max-3) = temp_fft_max-3;
 
@@ -295,23 +326,24 @@ temp_fft2_signal = temp_fft2_signal(1:round(end/2));
 figure,
 plot(abs(temp_fft2_signal), 'LineWidth', 2);
 % 
-% % ************ reference signal
+% ************ reference signal
 % A_scan_Ave    = squeeze(mean(temp_img(1:10,1:10,1:end/2), [1, 2]));
-% % A_scan_Ave   = process3.refer_Ascan_aligned;
-% A_scan_Ave   = real(A_scan_Ave);
-% temp_fft_Ave = fft(A_scan_Ave, L);
-% temp_fft_Ave = abs(temp_fft_Ave(1:round(end/2)));
-% % *********** band selection **********
-% L_ori    = L*sampling_rate;
+A_scan_Ave   = process3.refer_Ascan_aligned;
+A_scan_Ave   = real(A_scan_Ave);
+temp_fft_Ave = fft(A_scan_Ave, L);
+temp_fft_Ave = abs(temp_fft_Ave(1:round(end/2)));
+% *********** band selection **********
+L_ori    = L*sampling_rate;
 % temp_fft_Ave = cat(1, temp_fft_Ave(f_lo:f_up), ones(L_ori/2-(f_up-f_lo+1), 1));
-% 
-% temp_fft2     = fft(abs(temp_fft_Ave), sampling_rate*L/2);
-% temp_fft2_ave = abs(temp_fft2(1:round(end/2)));
-% figure,
-% plot(abs(temp_fft_Ave), 'LineWidth', 2);
-% figure,
-% plot((1:length(A_scan_Ave))/Fs, A_scan_Ave, 'LineWidth', 2);
-% 
+temp_fft_Ave = cat(1, temp_fft_Ave, ones(L_ori/2-length(temp_fft_Ave)), 1);
+
+temp_fft2     = fft(abs(temp_fft_Ave), sampling_rate*L/2);
+temp_fft2_ave = abs(temp_fft2(1:round(end/2)));
+figure,
+plot(abs(temp_fft_Ave), 'LineWidth', 2);
+figure,
+plot((1:length(A_scan_Ave))/Fs, A_scan_Ave, 'LineWidth', 2);
+
 % % ******* divide
 % temp_fft_abs = temp_fft_abs./temp_fft_Ave;
 % figure,
@@ -325,46 +357,164 @@ plot(abs(temp_fft2_signal), 'LineWidth', 2);
 % figure,
 % plot(abs(temp_fft2_signal), 'LineWidth', 2);
 
-% % substract
-% figure,
-% plot(abs(temp_fft2_signal)/max(abs(temp_fft2_signal)) ...
-%     - abs(temp_fft2_ave)/max(abs(temp_fft2_ave)), 'LineWidth', 2);
-% set(gca, 'fontsize', 16);
-% set(gca, 'fontname', 'Times new roman');
-% set(gca, 'linewidth', 1.5);
+% substract
+figure,
+plot(abs(temp_fft2_signal)/max(abs(temp_fft2_signal)) ...
+    - abs(temp_fft2_ave)/max(abs(temp_fft2_ave)), 'LineWidth', 2);
+set(gca, 'fontsize', 16);
+set(gca, 'fontname', 'Times new roman');
+set(gca, 'linewidth', 1.5);
 % 
-%% 2 times fft determining the depth
-PropertyName = 'img_hil';
-max_len      = 1500;
-flag_DG      = 0; % apply DynamicGate
-delay        = 1; % delay for the search on the 2nd fft, unit: points
-filter_flag  = 0;
-passband     = [0.5e6 15e6];
-process3     = process3.find_surface_2fft(PropertyName, max_len, flag_DG, delay, filter_flag, passband);
 
-% filename_fig = filename;
+%% add noise
+% process3 = process3.read_origin_data; % read (reset) the dataset
+% process3 = process3.cut_edges(window, x_step, y_step);
+max_len  = 1200;
+snr      = 5;
+process3 = process3.addnoise(snr, max_len);
 % close all;
-% process3.show_surfaces(filename_fig(1:end-5));
+% dBW      = -5;
+% seed     = 1;
+% process3 = process3.addnoise_bydBW(dBW);
 
-flag = 1; % using depth property % flag==1: using front and back surface to calculate
-process3.damage_depth_imaging(flag);
+%% downsample dataset
+% process3 = process3.read_origin_data; % read (reset) the dataset
+% process3 = process3.cut_edges(window, x_step, y_step);
+% snr      = 15;
+% process3 = process3.addnoise(snr);
+close all;
+% sampling_rate = 250/15;
+sampling_rate = 10;
+process3      = process3.data_downsample(sampling_rate);
+
+%% add noise and downsample dataset
+snr = [15];
+close all;
+sampling_rate = [125/20 125/15];
+% sampling_rate = 8;
+max_len       = 1200;
+process3      = process3.data_downsample_addnoise(sampling_rate, snr, max_len);
 
 %% 2 times fft determining the depth and imaging
 % close all;
-% PropertyName = 'img_hil';
-PropertyName = 'img_hil_noise'; 
+clc;
+
+PropertyName = 'img_hil';
+% PropertyName = 'img_hil_noise'; 
 % PropertyName = 'img_hil_filter';
 % PropertyName = 'img_WienerDeconv';
 
-max_len     = 1500;
+max_len     = 1200;
 delay       = 40;
 filter_flag = 0;
 bwr         = -10; % dB
 
 % process3.find_surface_2fft_imaging_diff(PropertyName, max_len, filter_flag, bwr, sampling_rate);
-process3.find_surface_2fft_imaging_reference(PropertyName, max_len, filter_flag, bwr, sampling_rate);
+process3 = process3.find_surface_2fft_imaging_reference(PropertyName, max_len, filter_flag, bwr, sampling_rate, 'original');
 % process3.find_surface_2fft_imaging_window(PropertyName, max_len, delay, filter_flag, bwr, sampling_rate);
 % process3.find_surface_2fft_imaging_wavelet(PropertyName, filter_flag, sampling_rate);
+
+%% amplitude drop method to determine the defect size
+close all;
+
+PropertyName = 'img_hil';
+% filtertype   = {'LP', 'ideal'};
+% filtertype   = {'BP', 'ideal'};
+filtertype   = {'nofilter', 'ideal'};
+
+zrange       = [1200 2000]; % DT
+% zrange       = [1000 1250]; % for PE
+
+drop         = -3; % dB
+% drop         = -6; % dB
+process3     = process3.amplitude_drop_method(PropertyName, zrange, drop, filtertype);
+% process3     = process3.amplitude_drop_method_FWEfollow(PropertyName, zrange, drop, filtertype);
+
+%% loop and statistic
+close all;
+snr_vector = [30 25 20 15 10 5];
+% snr_vector = [10];
+fs_vector  = [1 125/50 125/25 125/20 125/15]; 
+% fs_vector  = [5] * 2; 
+[lx, ly, ~]   = size(process3.img_hil);
+map_depth_BWE = nan(length(snr_vector), length(fs_vector), lx, ly);
+PropertyName  = 'img_hil_noise';
+max_len     = 1200;
+filter_flag = 0;
+bwr         = -10; % dB
+img_raw     = real(process3.img_hil(:,:,1:max_len));
+% rewritten to accelerate
+for i = 1:length(snr_vector)
+    rng(1);  
+    for j = 1:length(fs_vector)
+        fs_rate        = fs_vector(j);
+        %         process3   = process3.data_downsample_addnoise(fs_rate, snr);
+        img_noiseadded = img_raw(:,:,1:fs_rate:end);
+        snr            = snr_vector(i);
+        [lx, ly, lz]   = size(img_noiseadded);
+        sigPower       = sum(abs(img_noiseadded).^2, 3) / lz; % linear
+        reqSNR         = 10^(snr/10);
+        noisePower     = sigPower/reqSNR;
+        noise          = repmat(sqrt(noisePower), [1 1 lz]) .* randn(lx, ly, lz);
+        img_noiseadded = img_noiseadded + noise;
+        process3.img_hil_noise = img_noiseadded;
+        % close all;
+        figurename = strcat(num2str(process3.fs/fs_rate), 'Hz_', num2str(snr), ' dB');
+        [process3, map_depth_BWE(i, j, :, :)]= process3.find_surface_2fft_imaging_reference...
+            (PropertyName, max_len, filter_flag, bwr, fs_rate, figurename);
+    end
+%     % save all figures
+%     FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Impact_damaged_sample\quefrency\QI";   % the destination folder
+%     FigList    = findobj(allchild(0), 'flat', 'Type', 'figure');
+%     for iFig = 1:length(FigList)
+%         FigHandle = FigList(iFig);
+%         FigName   = get(FigHandle, 'Name');
+%         %
+%         FigName = [FigName '_flip']; % specific
+%         %
+%         disp(fullfile(FolderName, FigName));
+%         set(0, 'CurrentFigure', FigHandle);
+%         saveas(gcf, strcat(FolderName, '\', FigName), 'epsc');
+%         saveas(gcf, strcat(FolderName, '\', FigName), 'pdf');
+%         saveas(gcf, strcat(FolderName, '\', FigName), 'fig');
+%     end
+    close all;
+end
+
+% mean + std
+stats_mean = mean(map_depth_BWE, [3 4], 'omitnan');
+stats_std  = std(map_depth_BWE, [], [3 4], 'omitnan');
+% median value and median absolute deviation MAD
+stats_medi = median(map_depth_BWE, [3 4], 'omitnan');
+stats_mad  = mad(map_depth_BWE, 1, [3 4]);
+
+figure,
+B = repmat(snr_vector.', 1, length(stats_mean(1,:)));
+erb = errorbar(B, stats_mean, stats_std/20, ...
+    '--s', 'MarkerSize', 10, 'CapSize', 15, 'LineWidth', 1);
+% plot(B, stats_mean, '--s', 'MarkerSize', 10, 'LineWidth', 1);
+xlabel('SNR (dB)');
+ylabel('depth (mm)');
+legendFs = strsplit(num2str(process3.fs ./ fs_vector ./ 1e6));
+legend(strcat('sampling rate =', legendFs, ' MHz'));
+xlim([2 40]);
+set(gca, 'fontsize', 16);
+set(gca, 'linewidth', 1.5);
+
+% median value and median absolute deviation MAD
+figure,
+B = repmat(snr_vector.', 1, length(stats_mean(1,:)));
+erb = errorbar(B, stats_medi, stats_mad/5, ...
+    '--s', 'MarkerSize', 10, 'CapSize', 15, 'LineWidth', 1);
+% plot(B, stats_mean, '--s', 'MarkerSize', 10, 'LineWidth', 1);
+xlabel('SNR (dB)');
+ylabel('depth (mm)');
+legendFs = strsplit(num2str(process3.fs ./ fs_vector ./ 1e6));
+legend(strcat('sampling rate =', legendFs, ' MS/s'));
+xlim([2 40]);
+set(gca, 'fontsize', 16);
+set(gca, 'linewidth', 1.5);
+
 
 %% check cepstrum
 A = imread('C:\Users\xiayang\OneDrive - UGent\Pictures\Capture.PNG');
@@ -453,7 +603,7 @@ flag = 1; % using depth property % flag==1: using front and back surface to calc
 process3.damage_depth_imaging(flag);
 
 %%
-flag = 1; % using depth property
+flag = 0; % using depth property
 process3.damage_depth_imaging(flag);
 
 %% freq-attenunation
@@ -475,15 +625,6 @@ att = rear_fft ./ front_fft;
 figure,
 plot((1:512)*Fs/512, abs(att));
 
-
-%% internal damage features
-% % filtered
-% f0        = 5e6;
-% sigma     = 0.5;
-% process3 = process3.Filter_logGabor(f0, sigma, 'img');
-
-%
-process3.damage_imaging;
 
 %% save all figures  
 FolderName  = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\quick_check";   % the destination folder

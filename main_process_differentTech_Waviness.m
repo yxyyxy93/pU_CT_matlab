@@ -1,14 +1,16 @@
+% read the file
 clc;
 close all;
 fclose all;
 clear;
 
-%% **************************************
+%%
+% 5 MHz
 % Define the class
 % read the preprocessed .mat
 [Filename1,Pathname1] = uigetfile({'*.mat'}, 'select the file');
 filename              = strcat(Pathname1, Filename1);
-process3              = class_process_RFdata(filename);
+process3              = class_process_woven_RFdata(filename);
 
 % read the settings
 [Filename1,Pathname1] = uigetfile({'*.xlsx'}, 'select the file');
@@ -17,58 +19,56 @@ process3              = process3.loadSettings(settinig_file);
 
 % read the data from the struct, or reset the dataset
 process3              = process3.read_origin_data; % read (reset) the dataset
-% 
-% process2.show_hilbert_Ascan(101, 96);
-% process2.show_hilbert_Ascan(50, 76);
 
-%% ********** surface (8p waviness sample)
-% 2D demo
-% total_plies = 24;
-% [angle, process] = process.show_one_Radontransform_vitualprofile(5, 0.5, 'img_hil_filter', center, radii, total_plies);
-
-% surface calculation
-% x: x index
-% y: y index
-% MinPD: MinPeakDistance for findpeaks
-% MinPH: MinPeakHeight for findpeaks
-MinPD        = 50;
-MinPH        = 0.13;  % these 2 parameters need to be changed for surface estimation.
-% PropertyName = 'img_WienerDeconv'; bh
-PropertyName = 'img_hil';
-process3.show_Ascan_inam_peaks(210, 304, MinPD, MinPH, PropertyName); % x, y
-
-% surface calculation
-max_len                = 700;
-threshold_delamination = 1;
-process3               = process3.find_front_amp(...
-    MinPD, MinPH, PropertyName, max_len, threshold_delamination);
-filename_fig           = filename;
-process3.show_surfaces(filename_fig(1:end-5));
-
-%
-process3.smooth_rear_I;
-process3.show_surfaces(filename_fig(1:end-5));
+disp(process3.fx);
+disp(process3.fy);
 
 %% window cutting
-x_step   = 1;
-y_step   = 1;
-window   = [1 350 1 550 1 1000];
+% window                = [50 149 40 139 1 1500];
+window                = [2 201 2 201 100 1400];
+x_step                = 1;
+y_step                = 1;
+% window                = [2 300 2 480 1 1500];
 % x_step                = 1;
 % y_step                = 1;
-process3 = process3.cut_edges(window, x_step, y_step);
+process3              = process3.cut_edges(window, x_step, y_step);
 
 process3.show_img_shape;
 
+% shift the A scan in the time domain
+process3 = process3.shift_A_scan(20);
+
+%% surface calculation
+% normal time window
+PropertyName = 'img_hil';
+% PropertyName = 'img_hil_filter';
+delay        = 600;
+max_len      = 1300;
+flag         = 0;
+front_I_max  = 800;
+process3     = process3.find_damage_timewin_asignsurface(PropertyName, max_len, flag, delay, front_I_max, 1);
+process3.show_surfaces(filename(1:end-5));
+
+% process3.rear_I = process3.front_I + mean(TOF_walls);
+
+% tackle the problem of walls determination
+TOF_walls    = -mean(process3.front_I-process3.rear_I, 'all', 'omitnan');
+
+% % shift the A scan in the time domain
+% process3        = process3.shift_A_scan(200);
+
+%% show A scan
+% define the index to select Ascan 
+x   = 50;
+y   = 50;
+
+[Ascan, t_space, fss] = process3.demo_Ascan(x, y, strcat('A_scan_', Filename1(1:end-5)));
+   
 %% ********** one-plane EDA
 % define the C_scan_inam as well
-% PropertyName = 'img_WienerDeconv';
-
-f0       = 15e6;
-sigma    = 0.7; 
-process3 = process3.Filter_logGabor(f0, sigma, 'img');
 % PropertyName = 'img_hil_filter';
 PropertyName = 'img_hil';
-ratio        = 3.5/8;
+ratio        = 3.5/24;
 process3     = process3.define_parallel_inamCscan...
     (ratio, PropertyName);
 %
@@ -76,19 +76,18 @@ imagename = 'C_scan_inam';
 % curvelet denoising
 sigma     = 5e-4;
 process3  = process3.curvelet_denoise_inamCscan(sigma, imagename);
-
-% Radontransform
-theta         = 1:1:180;
-radiis        = 10;
-angle_compens = 0;
-process3      = process3.compute_orientation_by_RT_correct(radiis, theta, imagename);
-process3.show_orientation_by_ID_RT(radiis, theta, imagename, angle_compens);
+% % Radontransform
+% theta         = 1:1:180;
+% radiis        = 10;
+% angle_compens = 0;
+% process3      = process3.compute_orientation_by_RT_correct(radiis, theta, imagename);
+% process3.show_orientation_by_ID_RT(radiis, theta, imagename, angle_compens);
 
 % 2d log-Gabor fitler
-wavelength  = 4:2:20;
-orientation = 1:1:180;
+wavelength  = 4:4:16;
+orientation = 0:2:180;
 SFB         = 1; % [0.5 2.5]
-SAR         = 0.7; % [0.23 0.92]
+SAR         = 0.5; % [0.23 0.92]
 
 % imagename = 'C_scan_inam_denoise';
 % process3  = process3.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
@@ -96,187 +95,98 @@ SAR         = 0.7; % [0.23 0.92]
 imagename     = 'C_scan_inam';
 process3      = process3.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
 % K: controls how much smoothing is applied to the Gabor magnitude responses.
-K             = 1e0;
-angle_compens = 0;
-process3.show_orientation_by_ID_allwl(wavelength, orientation, K, imagename, angle_compens);
-
-%% 'distance to front and rear' in-plane orientation extraction
-% RT
-% PropertyName     = 'img_WienerDeconv'; % deconvolved signal
-% PropertyName  = 'img_hil_filter'; % orginal signal
-PropertyName  = 'img_hil';
-
-radius        = 10;
-theta         = 1:1:180; % degree
-ratio         = 0/24:0.1/24:24/24;
-sigma_denoise = 0;
+K             = 0.5e0;
+angle_compens = -14;
 tic;
-process3      = process3.extract_local_orientation_RT_3D_parallel(...
-    PropertyName, radius, theta, ratio, sigma_denoise);
+process3.show_orientation_by_ID_allwl(wavelength, orientation, K, imagename, angle_compens);
 toc;
 
-% show slice
-xslice        = 150 / process3.fx * 1e3;
-yslice        = 50 / process3.fy * 1e3;
-zslice        = []; % us
-angle_compens = -7;
-process3.show_inplane_direction_3D(xslice, yslice, zslice, angle_compens);
+%% 3D information Diagram
+% PropertyName  = 'img_hil';
+% 
+% wavelength  = 8:2:16;
+% orientation = 0:1:180; % degree
+% SFB         = 1;       % [0.5 2.5]
+% SAR         = 0.5;     % [0.23 0.92]
+% z_theta     = 0;
+% K           = 2;   
+% z_range     = [1 1300];
+% %
+% tic;
+% process3 = process3.extract_local_orientation_3DID...
+%     (PropertyName, wavelength, orientation, z_theta, z_range, K, SFB, SAR);
+% toc;
+% 
+% % % 3D ID plane
+% % y_ori = 0:1:20;
+% % z_ori = 0:1:20;
+% % 
+% % tic;
+% % process3 = process3.extract_local_orientation_3DID_plane...
+% %     (PropertyName, wavelength, y_ori, z_ori, z_range, K);
+% % toc;
+% 
+% % show slice
+% xslice        = 100 / process3.fx * 1e3;
+% yslice        = 100 / process3.fy * 1e3;
+% zslice        = [];
+% mfsize        = [1 1 1];
+% angle_compens = 14;
+% process3.show_inplane_direction_3D_ID(xslice, yslice, zslice, mfsize, angle_compens);
+% 
+% process3.statistic_angular_distribution(angle_compens);
 
+%% 'distance to front and rear' in-plane orientation extraction
 % 2D log-Gabor filter
-wavelength         = 4:2:20;
-orientation        = 1:1:180;
-ratio              = 0/24:1/24:24/24;
-K                  = 0.5e0;
+wavelength      = 4:4:16;
+orientation     = 0:2:180;
+ratio           = 0/24:0.3/24:24/24;
+K               = 0.5e0;
 % sigma              = 5e-4;
-sigma              = 0;
+sigma           = 0;
 tic;
-process3           = process3.extract_local_orientation_3D_parallel_allwl(...
+process3 = process3.extract_local_orientation_3D_parallel_allwl(...
     PropertyName, wavelength, orientation, ratio, K, sigma);
 toc;
 
 % show slice
-xslice        = 50 / process3.fx * 1e3;
-yslice        = 50 / process3.fy * 1e3;
-zslice        = []; % us
-angle_compens = 0;
+xslice        = 100 / process3.fx * 1e3;
+yslice        = 100 / process3.fy * 1e3;
+zslice        = [] / process3.fs; % all single type
 mfsize        = [1 1 1];
+angle_compens = -14;
 process3.show_inplane_direction_3D_ID(xslice, yslice, zslice, mfsize, angle_compens);
 
-%% *************** 3d ply track
-% add noise to img.
-% process = process.addnoise(25);
-% origin without filter
-threshold  = 0.01;  % max(inam) * threshold for distinguishing the back surface
+process3.statistic_angular_distribution(angle_compens);
 
-% % process  = process.track_interply('img_hil');
-% process3   = process3.track_interply_inph(threshold, 'img_hil');
-% 
-% %
-% % process.show_track_interply(xslice, yslice, zslice);
-% process3.show_oneinterply(5, 'nofilter', 3000, win_x, win_y, TOF_oneply);
-% process3.show_oneinterply(15, 'nofilter', 3000, win_x, win_y, TOF_oneply);
-% process3.show_oneinterply(23, 'nofilter', 3000, win_x, win_y, TOF_oneply);
-% process3.show_B_scan_interply(B_type, index, Bwin, 'img_hil');
+%% save dataset ***********
+FolderName = "F:\Xiayang\results\DifferentTech_fiberorientation\";   % the destination folder
+props = properties(process3);
+for iprop = 1:length(props)
+    thisprop = props{iprop};
+    if(isnumeric(process3.(thisprop)))
+        process3.(thisprop) = single(process3.(thisprop));
+    end
+end
 
-% % filtered
-f0        = 5.5e6;
-sigma     = 0.7;
+save(strcat(FolderName, Filename1(1:end-5), '_50M.mat'), '-v7.3');
 
-% for debug
-% threshold = 0.05;
-x         = 100;
-y         = 98;
-% process3.demo_logGabor_plytrack_inph_v2(x, y, f0, sigma, threshold);
-process3.show_hilbert_Ascan(x, y);
-process3.show_logGabor_Scaleogram(3e6:0.1e6:16e6, sigma, x, y);
+load(strcat(FolderName, '27072020_12h07m33s_50M.mat'));
 
-% 0.676 us - 2.13 us
+% 27072020_14h22m13s_5M.mat
+% 27072020_12h07m33s_50M
 
-%  
-process3 = process3.Filter_logGabor(f0, sigma, 'img');
-% nol      = 17;
-% process3 = process3.track_interply_2ndharmonic('img_hil_filter', nol);
-process3 = process3.track_interply('img_hil_filter');
+%% check A-scans - 2 times fft
+close all;
 
-% use 2nd-harmonic for first and the last interplies, 
-% use fundamental resonance for another interplies
-f0_1     = 11e6;
-sigma0_1 = 0.8;
-f0_2     = 5.5e6;
-sigma0_2 = 0.7;
-nol      = 9;
-process3 = process3.track_interply_hybrid(...
-    'img', f0_1, sigma0_1, f0_2, sigma0_2, nol);
+process3.Cepstrum_deconv(50, 50);
 
-%%
-B_type     = 'x';
-index      = 200;
-Bwin       = 1:200;
-TOF_oneply = TOF_walls / 24; % 24 plies
-process3.show_B_scan_interply(B_type, index, Bwin, 'img_hil');
-
-% 3d slices
-xslice     = 175 / process3.fx * 1e3;
-yslice     = 175 / process3.fy * 1e3;
-zslice     = [];
-process3.show_interply_track_3D_knn(xslice, yslice, zslice);
-% process.show_track_interply(xslice, yslice, zslice);
-win_x      = 1:80;
-win_y       = 1:80;
-process3.show_oneinterply(05, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-process3.show_oneinterply(15, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-process3.show_oneinterply(22, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-
-std_mean_threshold = [1, 0.22]; % modify here 
-figname            = 'logGabor';
-process3.thickness_estimation_v1(5.5, 24, win_x, win_y, figname);
-
-% plot with uniformly spaced locaitons
-threshold = 0.05;
-nol       = 25;
-TOF       = process3.track_show_B_scan_interply(...
-    B_type, 80, Bwin, 'img_hil_filter', threshold, nol, std_mean_threshold);
-% 
-% % pos. err. calculation 
-% % win_x      = 50:250;
-% % win_y      = 50:250;
-% layers_num = 25;
-% process3   = process3.error_pos_calculate(win_x, win_y, layers_num);
-
-% TOF    = process3.track_show_B_scan_interply(B_type, index, Bwin, 'img_hil_filter', threshold);
-save TOF.mat TOF_walls;
-
-%% one-plane EDA
-% 2D demo
-% define the C_scan_inam as well
-% % filtered
-f0       = 15e6;
-sigma    = 0.7; 
-process3 = process3.Filter_logGabor(f0, sigma, 'img');
-%
-PropertyName = 'img_hil_filter';
-% PropertyName = 'img_hil';
-% PropertyName = 'img_WienerDeconv';
-ply          = 3;
-ratio        = 0.5;
-process3     = process3.define_plywise_inamCscan(ply, ratio, PropertyName);
-% curvelet denoising
-sigma        = 5e-3;
-%
-imagename     = 'C_scan_inam_plywise';
-process3      = process3.curvelet_denoise_inamCscan(sigma, imagename);
-% RT
-theta         = 1:1:180;
-radiis        = 10;
-% imagename     = 'C_scan_inam_plywise';
-% imagename     = 'C_scan_inam_denoise';
-process3      = process3.compute_orientation_by_RT_correct(radiis, theta, imagename);
-angle_compens = 0;
-process3.show_orientation_by_ID_RT(radiis, theta, imagename, angle_compens);
-
-% 2d log-Gabor fitler
-wavelength  = 4:1:20;
-orientation = 1:1:180;
-SFB         = 1; % [0.5 2.5]
-SAR         = 0.7; % [0.23 0.92]
-
-% K: controls how much smoothing is applied to the Gabor magnitude responses.
-K             = 0.5e0;
-process3      = process3.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
-angle_compens = 0;
-process3.show_orientation_by_ID_allwl(wavelength, orientation, K, imagename, angle_compens);
-
-%%
-FolderName  = "F:\Xiayang\results\image_processing\";
-save(strcat(FolderName, Filename1(1:end-4), 'mat'), '-v7.3');
-
-load(strcat(FolderName, '12022021_11h25m10s.mat'));
-
-% 10022021_15h49m02s       % waviness sample
-% 12032021_11h14m41s   
-%% save all figures 3rd paper
-FolderName  = "F:\Xiayang\results\image_processing";   % the destination folder
-FigList     = findobj(allchild(0), 'flat', 'Type', 'figure');
+%% save all figures
+% "F:\Xiayang\results\Woven_samples\01032021_12h31m02s\f_5_omega07"
+% "F:\Xiayang\results\Woven_samples\01032021_12h31m02s\f_10_omega07"
+% !! don not forget to change the last folder path
+FolderName = "F:\Xiayang\results\DifferentTech_fiberorientation\15MHz";   % the destination folder
+FigList = findobj(allchild(0), 'flat', 'Type', 'figure');
 for iFig = 1:length(FigList)
   FigHandle = FigList(iFig);
   FigName   = get(FigHandle, 'Name');

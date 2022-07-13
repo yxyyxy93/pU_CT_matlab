@@ -44,23 +44,23 @@ load(strcat(FolderName, '20220428_BP1_3_025m_V313_25db_PEmat.mat'));
 process3.show_img_shape;
 % cut the img, otherwise it could be out of the memory
 % window = [101 180 81 160 1 1500]; 
-% window   = [1 296 1 175 1 1200]; 
-window   = [171 270 1 100 1 1500];  % for 025m impact samples
+window   = [101 400 101 400 1 1000]; 
+% window   = [171 270 1 100 1 1500];  % for 025m impact samples
 % window   = [61 140 57 136 1 1500];  % for 025m impact samples
 
-x_step   = 1;
-y_step   = 1;
+x_step   = 2;
+y_step   = 2;
 process3 = process3.cut_edges(window, x_step, y_step);
 process3.show_img_shape;
 % % 3D viewer
 % volumeViewer(abs(process3.img_hil));
 
 %% show A scan
-% define the index to select Ascan 
-x   = 56;
-y   = 63;
-% process3.demo_AS_3D_inclinfq(x, y);
-process3.show_hilbert_Ascan(x, y);
+x   = 50;
+y   = 50;
+
+[Ascan, t_space, fss] = process3.demo_Ascan(x, y, strcat('A_scan_', Filename1(1:end-5)));
+   
 
 %% show C scan
 % define the index to select Ascan 
@@ -99,7 +99,7 @@ clc;
 MinPD   = 5;
 MinPH   = 0.12;  % these 2 parameters need to be changed for surface estimation.
 % surface calculation
-max_len = 1500;
+max_len = 1000;
 alpha   = 4e-3;
 A_ratio = 0.95;
 
@@ -120,19 +120,20 @@ process3 = process3.recover_surface;
 %% normal time window
 PropertyName = 'img_hil';
 % PropertyName = 'img_hil_filter';
-delay        = 600;
+delay        = 300;
 max_len      = 1500;
 flag         = 0;
-front_I_max  = 400;
+front_I_max  = 500;
 process3     = process3.find_damage_timewin_asignsurface(PropertyName, max_len, flag, delay, front_I_max, 1);
-process3.show_surfaces(filename_fig(1:end-5));
+process3.show_surfaces(filename(1:end-5));
 
 %% align the front surfaces
-delay_I      = 300;
-PropertyName = 'img_hil';
+% delay_I      = 100;
+% PropertyName = 'img_hil';
 % PropertyName = 'img';
 process3     = process3.align_front_surface(delay_I, PropertyName);
 
+process3.rear_I = process3.front_I + 900;
 % back surface
 % process3     = process3.align_rear_surface(delay_I, PropertyName);
 
@@ -180,30 +181,30 @@ y = 10;
 process3.demo_logGabor_plytrack_inph(x, y, f0, sigma, threshold);
 
 %% 3d ply track
-
-% log-Gabor filter
-f0        = 12.8e6;
-sigma     = 0.7;
-process3  = process3.Filter_logGabor(f0, sigma, 'img_hil');
-
-% % low-pass filter
-% bandpassFreq = 10e6;
-% process3     = process3.Filter_lowpass(bandpassFreq, 'img_hil');
-
-threshold = 0.05;
-% process3  = process3.track_interply('img_hil_filter');
-process3  = process3.track_interply_inph(threshold, 'img_hil_filter', 21);
-
-%%
-% use 2nd-harmonic for first and the last interplies, 
-% use fundamental resonance for another interplies
-f0_1     = 12.8e6;
-sigma0_1 = 0.8;
-f0_2     = 6.3e6;
-sigma0_2 = 0.7;
-nol      = 21; % make it 25+1 in case that there is redundant accidently-tracked interply
-process3 = process3.track_interply_hybrid( ...
-    'img', f0_1, sigma0_1, f0_2, sigma0_2, nol);
+% 
+% % log-Gabor filter
+% f0        = 12.8e6;
+% sigma     = 0.7;
+% process3  = process3.Filter_logGabor(f0, sigma, 'img_hil');
+% 
+% % % low-pass filter
+% % bandpassFreq = 10e6;
+% % process3     = process3.Filter_lowpass(bandpassFreq, 'img_hil');
+% 
+% threshold = 0.05;
+% % process3  = process3.track_interply('img_hil_filter');
+% process3  = process3.track_interply_inph(threshold, 'img_hil_filter', 21);
+% 
+% %%
+% % use 2nd-harmonic for first and the last interplies, 
+% % use fundamental resonance for another interplies
+% f0_1     = 12.8e6;
+% sigma0_1 = 0.8;
+% f0_2     = 6.3e6;
+% sigma0_2 = 0.7;
+% nol      = 21; % make it 25+1 in case that there is redundant accidently-tracked interply
+% process3 = process3.track_interply_hybrid( ...
+%     'img', f0_1, sigma0_1, f0_2, sigma0_2, nol);
 
 %%
 TOF_walls    = -mean(process3.front_I - process3.rear_I, 'all', 'omitnan');
@@ -222,113 +223,113 @@ process3.show_oneinterply(3, 'logGabor', 3000, win_x, win_y, TOF_oneply);
 % process3.show_oneinterply(10, 'logGabor', 3000, win_x, win_y, TOF_oneply);
 % process3.show_oneinterply(15, 'logGabor', 3000, win_x, win_y, TOF_oneply);
 
-%%
+%% show
+% % close all;
+% win_x = 1:100;
+% win_y = 1:100;
+% 
+% process3.show_oneinterply_2dfft(7, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+% 
+% process3.show_oneinterply_2dfft(13, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+% process3.show_oneinterply_2dfft(14, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+% process3.show_oneinterply_2dfft(15, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+% 
 % close all;
-win_x = 1:100;
-win_y = 1:100;
+% process3.show_oneinterply_2dfft(9, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+% process3.show_oneinterply_2dfft(10, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+% process3.show_oneinterply_2dfft(11, 'logGabor', 3000, win_x, win_y, TOF_oneply);
+% process3 = process3.show_oneinterply_2dfft(14, 'logGabor', 3000, win_x, win_y, TOF_oneply);
 
-process3.show_oneinterply_2dfft(7, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-
-process3.show_oneinterply_2dfft(13, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-process3.show_oneinterply_2dfft(14, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-process3.show_oneinterply_2dfft(15, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-
-close all;
-process3.show_oneinterply_2dfft(9, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-process3.show_oneinterply_2dfft(10, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-process3.show_oneinterply_2dfft(11, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-process3 = process3.show_oneinterply_2dfft(14, 'logGabor', 3000, win_x, win_y, TOF_oneply);
-
-%% save images 
-PropertyName = 'img_hil';
-ratios       = 0.2:0.1:0.8;
-sigma        = 5e-3;
-imagename    = 'C_scan_inam_plywise';
-
-[process3, image1, ~]  = process3.define_plywise_inamCscan(1, ratios, PropertyName);
-process3.curvelet_denoise_inamCscan(sigma, imagename);
-[process3, image2, ~]  = process3.define_plywise_inamCscan(2, ratios, PropertyName);
-process3.curvelet_denoise_inamCscan(sigma, imagename);
-[process3, image3, ~]  = process3.define_plywise_inamCscan(3, ratios, PropertyName);
-process3.curvelet_denoise_inamCscan(sigma, imagename);
-[process3, image4, ~]  = process3.define_plywise_inamCscan(4, ratios, PropertyName);
-process3.curvelet_denoise_inamCscan(sigma, imagename);
-
+% %% save images 
+% PropertyName = 'img_hil';
+% ratios       = 0.2:0.1:0.8;
+% sigma        = 5e-3;
+% imagename    = 'C_scan_inam_plywise';
+% 
+% [process3, image1, ~]  = process3.define_plywise_inamCscan(1, ratios, PropertyName);
+% process3.curvelet_denoise_inamCscan(sigma, imagename);
+% [process3, image2, ~]  = process3.define_plywise_inamCscan(2, ratios, PropertyName);
+% process3.curvelet_denoise_inamCscan(sigma, imagename);
+% [process3, image3, ~]  = process3.define_plywise_inamCscan(3, ratios, PropertyName);
+% process3.curvelet_denoise_inamCscan(sigma, imagename);
+% [process3, image4, ~]  = process3.define_plywise_inamCscan(4, ratios, PropertyName);
+% process3.curvelet_denoise_inamCscan(sigma, imagename);
+% 
+% % save('wovenstrcuture_5MHz.mat','image1','image2','image3','image4');
+% 
+% %% save images 
+% imagename = 'C_scan_inam';
+% 
+% [process3, image1, ~]  = process3.define_parallel_inamCscan(1/20, PropertyName);
+% process3.curvelet_denoise_inamCscan(sigma, imagename);
+% [process3, image2, ~]  = process3.define_parallel_inamCscan(2/20, PropertyName);
+% process3.curvelet_denoise_inamCscan(sigma, imagename);
+% [process3, image3, ~]  = process3.define_parallel_inamCscan(3/20, PropertyName);
+% process3.curvelet_denoise_inamCscan(sigma, imagename);
+% [process3, image4, ~]  = process3.define_parallel_inamCscan(4/20, PropertyName);
+% process3.curvelet_denoise_inamCscan(sigma, imagename);
+% 
 % save('wovenstrcuture_5MHz.mat','image1','image2','image3','image4');
 
-%% save images 
-imagename = 'C_scan_inam';
-
-[process3, image1, ~]  = process3.define_parallel_inamCscan(1/20, PropertyName);
-process3.curvelet_denoise_inamCscan(sigma, imagename);
-[process3, image2, ~]  = process3.define_parallel_inamCscan(2/20, PropertyName);
-process3.curvelet_denoise_inamCscan(sigma, imagename);
-[process3, image3, ~]  = process3.define_parallel_inamCscan(3/20, PropertyName);
-process3.curvelet_denoise_inamCscan(sigma, imagename);
-[process3, image4, ~]  = process3.define_parallel_inamCscan(4/20, PropertyName);
-process3.curvelet_denoise_inamCscan(sigma, imagename);
-
-save('wovenstrcuture_5MHz.mat','image1','image2','image3','image4');
-
 %% read reference signal
-[Filename1, Pathname1] = uigetfile({'*.tdms'},  'select the file');   
-filename               = strcat(Pathname1, Filename1);
-x                      = 10;
-y                      = 10;
-process3               = process3.read_refer(filename, x, y);
-
-% cut the ref. signal
-win                    = [0.1e-6 2e-6]; % unit: s
-process3               = process3.cut_reference_signal(win);
-
-% calculate the SNR
-win_noise              = [0.1e-6 0.5e-6];
-win_signal             = [0.6e-6 1e-6]; % unit: s
-snr                    = process3.calculate_SNR(win_signal, win_noise);
-
-% align the signal
-process3               = process3.align_refer_ascan(x, y); 
+% [Filename1, Pathname1] = uigetfile({'*.tdms'},  'select the file');   
+% filename               = strcat(Pathname1, Filename1);
+% x                      = 10;
+% y                      = 10;
+% process3               = process3.read_refer(filename, x, y);
+% 
+% % cut the ref. signal
+% win                    = [0.1e-6 2e-6]; % unit: s
+% process3               = process3.cut_reference_signal(win);
+% 
+% % calculate the SNR
+% win_noise              = [0.1e-6 0.5e-6];
+% win_signal             = [0.6e-6 1e-6]; % unit: s
+% snr                    = process3.calculate_SNR(win_signal, win_noise);
+% 
+% % align the signal
+% process3               = process3.align_refer_ascan(x, y); 
 
 %% deconvolution
-x           = 50;
-y           = 50;
-q_factor    = 1e-2;
-q_factor_AR = 1e-2;
-fft_padding = 2^11;
-f1          = 8e6;
-f2          = 19e6;
-bw          = [f1 f2];
-bwr         = -3:-1:-10;
-k           = 30;
-lam         = 0.01;
-ker_wid     = 100;
-Nit         = 45;
-DownRate    = 1;
-fig_subname = '2-CEH105-24-p4_15MHz';
-process3.demo_deconvolutions(x, y, q_factor, q_factor_AR, ...
-    fft_padding, bw, bwr, k, lam, ker_wid, DownRate, Nit, fig_subname);
-
-% demo B scan
-B_type      = 'x'; % scaning direction 'y'
-index       = 50;
-Bwin        = 1:100;
-% process = process.deconv_ARextrapolation(Bwin, B_type, index, q_factor_AR, fft_padding, bw, bwr, k, ker_wid, fig_subname);
-
-% process.demo_deconvolutions(x, y, q_factor, q_factor_AR, fft_padding, bw, k, lam, ker_wid, DownRate, Nit, fig_subname);
+% x           = 50;
+% y           = 50;
+% q_factor    = 1e-2;
+% q_factor_AR = 1e-2;
+% fft_padding = 2^11;
+% f1          = 8e6;
+% f2          = 19e6;
+% bw          = [f1 f2];
+% bwr         = -3:-1:-10;
+% k           = 30;
+% lam         = 0.01;
+% ker_wid     = 100;
+% Nit         = 45;
+% DownRate    = 1;
+% fig_subname = '2-CEH105-24-p4_15MHz';
+% process3.demo_deconvolutions(x, y, q_factor, q_factor_AR, ...
+%     fft_padding, bw, bwr, k, lam, ker_wid, DownRate, Nit, fig_subname);
 % 
-process3     = process3.apply_deconvolutions_Bscan(Bwin, B_type, index, q_factor, q_factor_AR, fft_padding, bw, bwr, k, lam, ker_wid, DownRate, Nit);
-
-process3.demo_deconvolutions_Bscans(B_type, index, Bwin, fig_subname);
+% % demo B scan
+% B_type      = 'x'; % scaning direction 'y'
+% index       = 50;
+% Bwin        = 1:100;
+% % process = process.deconv_ARextrapolation(Bwin, B_type, index, q_factor_AR, fft_padding, bw, bwr, k, ker_wid, fig_subname);
+% 
+% % process.demo_deconvolutions(x, y, q_factor, q_factor_AR, fft_padding, bw, k, lam, ker_wid, DownRate, Nit, fig_subname);
+% % 
+% process3     = process3.apply_deconvolutions_Bscan(Bwin, B_type, index, q_factor, q_factor_AR, fft_padding, bw, bwr, k, lam, ker_wid, DownRate, Nit);
+% 
+% process3.demo_deconvolutions_Bscans(B_type, index, Bwin, fig_subname);
 
 %%
-% process3 = process3.apply_deconvolutions(q_factor, q_factor_AR, fft_padding, bw, bwr, k, ker_wid);
-process3 = process3.apply_deconvolutions_onlyWiener(q_factor, ker_wid);
-
-% save('process2.mat','process2');
-
-fx_Scrollable_3d_view(abs(process3.img_hil));
-
-% fx_Scrollable_3d_view(abs(fft(abs(fft(process3.img, [], 3)), [],3)));
+% % process3 = process3.apply_deconvolutions(q_factor, q_factor_AR, fft_padding, bw, bwr, k, ker_wid);
+% process3 = process3.apply_deconvolutions_onlyWiener(q_factor, ker_wid);
+% 
+% % save('process2.mat','process2');
+% 
+% fx_Scrollable_3d_view(abs(process3.img_hil));
+% 
+% % fx_Scrollable_3d_view(abs(fft(abs(fft(process3.img, [], 3)), [],3)));
 
 %% one-plane EDA
 % % 2D demo
@@ -395,6 +396,81 @@ process3.show_orientation_by_ID_allwl( ...
 % % curvelet
 % process3  = process3.compute_curvelet(imagename);
 % process3.show_orientation_by_curveletID(imagename);
+
+%% one-plane EDA 2D analytic-signal
+% PropertyName = 'img_hil_filter';
+PropertyName = 'img_hil';
+% PropertyName = 'img_WienerDeconv';
+% PropertyName = 'img_WienerDeconv_AR'';
+
+process3 = process3.define_parallel_inamCscan(3.5/24, PropertyName);
+imagename   = 'C_scan_inam';
+clc;
+
+s_0    = 4;
+lambda = 0.5;
+k      = 1;
+
+s_c = s_0*lambda^(k-1); % coarse scale space parameter
+s_f = s_c * lambda; % fine scale space parameter
+
+fprintf("s_c: %0.2f \n", s_c);
+fprintf("s_f: %0.2f \n", s_f);
+
+% s_c = 10;  % coarse scale space parameter
+% s_f = 4; % fine scale space parameter
+
+% output relative bandwidth and center frequency
+fprintf("relative bandwidth: %0.2f \n", lambda);
+fprintf("octave number: %0.2f \n", k);
+fprintf("wavelength: %0.2f \n", 2*pi*s_c*(lambda-1) / log(lambda));
+
+mask_size = s_0*2;
+process3.compute_2D_analytic_signal_image(PropertyName, s_f, s_c, mask_size, imagename);
+
+% % scale adapted
+% scale_map = ones(size(process3.(imagename))- 2*mask_size-2);
+% ampli_map = zeros(size(process3.(imagename)) - 2*mask_size-2);
+% orien_map = zeros(size(process3.(imagename)) - 2*mask_size-2);
+% apexa_map = zeros(size(process3.(imagename)) - 2*mask_size-2);
+% for s_0 = 0.5:10
+%     s_c = s_0*lambda^(k-1); % coarse scale space parameter
+%     s_f = s_c * lambda; % fine scale space parameter
+%     [~, orien, ampli, apexa] = process3.compute_2D_analytic_signal_image(PropertyName, s_f, s_c, mask_size, imagename);
+%     mask = ampli > ampli_map;
+%     ampli_map = mask .* ampli + (1-mask) .* ampli_map;
+%     orien_map = mask .* orien + (1-mask) .* orien_map;
+%     apexa_map = mask .* apexa + (1-mask) .* apexa_map;
+%     scale_map(mask) = s_0;
+% end
+% close all;
+% 
+% orien_map(apexa_map>=0) = nan;
+
+%% 'distance to front and rear' in-plane orientation extraction 2D analytic-signal 
+% 2D analytic-signal
+PropertyName  = 'img_hil';
+% PropertyName  = 'img_hil_filter';
+% PropertyName = 'img_WienerDeconv';
+
+ratios        = 0/24:0.1/24:24/24;
+sigma_denoise = 0;
+% 2D analytic signal
+
+tic;
+process3 = process3.extract_local_orientation_3D_parallel_2Danalytic_signal...
+    (PropertyName, s_f, s_c, mask_size, ratios, sigma_denoise);    
+toc;
+
+%% show slice
+angle_compens = 14;
+
+D_3d = fx_Scrollable_3d_view(process3.Inplane_direction_3D_ID + angle_compens);
+
+% volumeViewer(process3.Inplane_direction_3D_ID + angle_compens);
+
+process3.statistic_angular_distribution(angle_compens);
+caxis([0 0.02]);
 
 %% monogenic signal analysis
 PropertyName = 'img_hil';
@@ -609,7 +685,7 @@ z_range     = [1 1200];
 %
 tic;
 process3 = process3.extract_local_orientation_3DID...
-    (PropertyName, wavelength, orientation, z_theta, z_range, K);
+    (PropertyName, wavelength, orientation, z_theta, z_range, K, SFB, SAR);
 toc;
 
 % % 3D ID plane

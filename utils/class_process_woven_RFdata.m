@@ -1342,8 +1342,114 @@ classdef class_process_woven_RFdata < class_process_RFdata
             obj.rear_I = rear_I;
         end
         
+        % ******************** 2D analytic-signal analysis*******************
+        
+        function obj = extract_local_orientation_3D_parallel_2Danalytic_signal(obj, PropertyName, s_f, s_c, mask_size, ratios, sigma_denoise)
+            % extract the local orientation image in each ply
+            % PropertyName: 'img', 'img_hil' or 'img_hil_filter' ...
+            % wavelength: wavelengths of the filter bank for logGabor filter gabor
+            % orientation: orientations of the filter bank for logGabor filter gabor
+            % ratios: the ratio determing the index by the front and back surfaces , unit: arb.
+            % K: the smoothing applied to the Gabor magnitude responses.
+            % sigma: threshould for curvelet denoising, 0 means no application of denoising
+            % ***
+            obj.PropertyName_LG       = PropertyName;
+            % start
+            Inplane_direction = NaN(size(obj.(PropertyName)));
+            index_container   = NaN(size(obj.front_I));
+            disp('2D analytic-signal calculation...');
+            for i = 1:length(ratios)
+                ratio = ratios(i); % the ratio to determine the index
+                if i~=length(ratios)
+                    ratio_next = ratios(i+1);
+                end
+                index_container_prev = index_container;
+                [~, C_scan_inam_para, index_container] = obj.define_parallel_inamCscan(ratio, PropertyName);
+                [~, ~, index_container_next]           = obj.define_parallel_inamCscan(ratio_next, PropertyName);
+                if sigma_denoise==0
+                    C_scan_inam_para_denoise = C_scan_inam_para;
+                else
+                    C_scan_inam_para_denoise = fx_curvelet_denoise_enhanced(sigma_denoise, C_scan_inam_para);
+                end
+                % ***************************
+                [X_mesh, Y_mesh] = meshgrid(-mask_size: mask_size, -mask_size: mask_size);
+                kernel_1_f = fx_2DHilbertKernel_1st(X_mesh, Y_mesh, s_f);
+                kernel_1_c = fx_2DHilbertKernel_1st(X_mesh, Y_mesh, s_c);
+                
+                kernel_2_f = fx_2DHilbertKernel_2nd(X_mesh, Y_mesh, s_f);
+                kernel_2_c = fx_2DHilbertKernel_2nd(X_mesh, Y_mesh, s_c);
+                
+                fp_kernel   = kernel_1_f * s_f - kernel_1_c * s_c;
+                q1_x_kernel = (kernel_1_f - kernel_1_c) .* X_mesh;
+                q1_y_kernel = (kernel_1_f - kernel_1_c) .* Y_mesh;
+                
+                q2_xx_kernel = (kernel_2_f - kernel_2_c) .* X_mesh.^2;
+                q2_xy_kernel = (kernel_2_f - kernel_2_c) .* X_mesh.*Y_mesh;
+                q2_yy_kernel = (kernel_2_f - kernel_2_c) .* Y_mesh.^2;
+                % ************ convolution ***********************
+                [m, n]  = size(fp_kernel);
+                fftSize = size(C_scan_inam_para_denoise) + [m, n] - 1;
+                f_p  = ifftn(fftn(C_scan_inam_para_denoise, fftSize) .* fftn(fp_kernel, fftSize), 'symmetric');
+                f_x  = ifftn(fftn(C_scan_inam_para_denoise, fftSize) .* fftn(q1_x_kernel, fftSize), 'symmetric');
+                f_y  = ifftn(fftn(C_scan_inam_para_denoise, fftSize) .* fftn(q1_y_kernel, fftSize), 'symmetric');
+                f_xx = ifftn(fftn(C_scan_inam_para_denoise, fftSize) .* fftn(q2_xx_kernel, fftSize), 'symmetric');
+                f_xy = ifftn(fftn(C_scan_inam_para_denoise, fftSize) .* fftn(q2_xy_kernel, fftSize), 'symmetric');
+                f_yy = ifftn(fftn(C_scan_inam_para_denoise, fftSize) .* fftn(q2_yy_kernel, fftSize), 'symmetric');
+                %
+                f_pm      = 0.5 * (f_xx - f_yy);
+                f_s       = 0.5 * f_p;
+                cos_alpha = sqrt(f_pm.^2 + f_xy.^2) ./ abs(f_s);
+                q         = (f_x.^2 + f_y.^2) .*2 ./ (1+cos_alpha);
+                %
+                phase = atan2(sqrt(q), f_p);
+                orien = 0.5 * atan2(f_xy, f_pm); % mean orientation
+                % orien    = atan2(f_y, f_x);
+                % mask_ori = phase<=1;
+                % orien(mask_ori) = 0.5 * atan2(f_xy(mask_ori), f_pm(mask_ori)) + pi/2;
+                ampli = 0.5 * sqrt(f_p.^2 + q);
+                apexa = atan2(real(sqrt(f_s.^2 - f_xy.^2 - f_pm.^2)), sqrt(f_xy.^2 + f_pm.^2));
+                % cut to shape
+                f_p = f_p(m:end-m, n:end-n);
+                phase = phase(floor(m): end-round(m), floor(n): end-round(n));
+                orien = orien(floor(m): end-round(m), floor(n): end-round(n));
+                ampli = ampli(floor(m): end-round(m), floor(n): end-round(n));
+                apexa = apexa(floor(m): end-round(m), floor(n): end-round(n));  
+                se = strel('disk', 1);
+                apexa = imopen(apexa, se);
+                % search for the orientation
+                orien_image = orien / pi * 180;
+                % mask
+                mask = apexa==0;
+                orien_image(~mask) = nan;
+                [lx, ly] = size(C_scan_inam_para_denoise);
+                for ii = floor(m/2): lx - round(m/2)-1
+                    for jj = floor(n/2): ly - round(n/2)-1
+                        if i==1
+                            upper_index_bound = index_container(ii, jj);
+                            lower_index_bound = round(index_container(ii, jj)/2 ...
+                                +index_container_next(ii, jj)/2);
+                        elseif i==length(ratios)
+                            upper_index_bound = round(index_container(ii, jj)/2 ...
+                                + index_container_prev(ii, jj)/2);
+                            lower_index_bound = index_container(ii, jj);
+                        else
+                            upper_index_bound = round(index_container(ii, jj)/2 ...
+                                + index_container_prev(ii, jj)/2);
+                            lower_index_bound = round(index_container(ii, jj)/2 ...
+                                +index_container_next(ii, jj)/2);
+                        end
+                        Inplane_direction(ii, jj, upper_index_bound: ...
+                            lower_index_bound) = orien_image(ii-floor(m/2)+1, jj-floor(n/2)+1);
+                    end
+                end
+                % end loop in one Cscan
+                disp([num2str(ratios(i)), '/', num2str(ratios(end))]);
+            end
+            obj.Inplane_direction_3D_ID         = Inplane_direction;
+        end
+        
         % ********************* 3D ID ********************
-        function obj = extract_local_orientation_3DID(obj, PropertyName, wl, orientation, z_theta, z_range, K)
+        function obj = extract_local_orientation_3DID(obj, PropertyName, wl, orientation, z_theta, z_range, K, SFB, SAR)
             % extract the local orientation image in each ply
             % PropertyName: 'img', 'img_hil' or 'img_hil_filter' ...
             % wavelength: wavelengths of the filter bank for logGabor filter gabor
@@ -1355,43 +1461,62 @@ classdef class_process_woven_RFdata < class_process_RFdata
             % start
             img_temp  = obj.(PropertyName);
             img_temp  = abs(img_temp(:, :, z_range(1): z_range(2)));
-            img_temp  = gpuArray(img_temp); % gpu
+%             img_temp  = gpuArray(img_temp); % gpu
             [m, n, l] = size(img_temp); 
+            img_temp  = gpuArray(img_temp);
 %             m_np2     = nextpow2(m);
 %             n_np2     = nextpow2(n);    
 %             l_np2     = nextpow2(l);
             % Gaussian filter
 %             sigma    = [0.2 0.2 20];
 %             img_temp = imgaussfilt3(img_temp, sigma);
-            Inplane_direction           = gpuArray(zeros([m, n, l]));
-            Inplane_direction_index_ori = gpuArray(zeros([m, n, l]));
-            Inplane_direction_index_zth = gpuArray(zeros([m, n, l]));
-            Inplane_direction_index_wl  = gpuArray(zeros([m, n, l]));
-            stati
-            \stic_mean = gpuArray(zeros([m, n, l]));
-            statistic_std  = gpuArray(zeros([m, n, l]));
-            SFB = 1.5;
-            SAR = 0.5;
+            Inplane_direction           = zeros([m, n, l]);
+            Inplane_direction_index_ori = zeros([m, n, l]);
+            Inplane_direction_index_zth = zeros([m, n, l]);
+            Inplane_direction_index_wl  = zeros([m, n, l]);
+            statistic_mean = zeros([m, n, l]);
+            statistic_std  = zeros([m, n, l]);
             %
             disp('convolution calculation...');
             for i = 1:length(orientation)
                 for j = 1:length(z_theta)
                     for w = 1:length(wl)
-                        thetas = [orientation(i), 0, z_theta(j)];
-                        h      = fx_handwritten_3DGabor(thetas, wl(w), SFB, SAR);
-                        h      = gpuArray(h); % gpu
+                        thetas   = [orientation(i), 0, z_theta(j)];
+                        h        = fx_handwritten_3DGabor(thetas, wl(w), SFB, SAR);
+                        h        = single(h);
+                        h        = gpuArray(h); % gpu
+%                         img_temp = gpuArray(img_temp);
                         %  fftSize = [2^m_np2, 2^n_np2, 2^l_np2];
-                        size_h = size(h);
-                        fftSize = size_h + [m n l] - 1;
-                        A_k = ifftn( fftn(img_temp, fftSize) .* fftn(real(h), fftSize), 'symmetric' );
+                        size_h       = size(h);
+                        fftSize      = size_h + [m n l] - 1;
+                        img_temp_fft = fftn(img_temp, fftSize);
+                        % release GPU
+%                         img_temp_fft = gather(img_temp_fft);
+%                         img_temp     = gather(img_temp);
+                        %
+                        h_fft        = fftn(real(h), fftSize);
+                        % release GPU 
+                        clear h;
+                        %
+                        A_k_fft      = img_temp_fft .* h_fft;
+                        % release GPU
+                        clear img_temp_fft;
+                        clear h_fft
+                        A_k = ifftn(A_k_fft, 'symmetric' );
+                        % release GPU
+                        clear A_k_fft;
+                        %
                         A_k = A_k ./ wl(w)^3;% normalization
-                        A_k = gpuArray(A_k); % gpu
                         A_k = imgaussfilt3(A_k, [K* 0.1*wl(w) K* 0.1*wl(w) K* 0.5*wl(w)]);
                         A_k = A_k(end/2-m/2+1:end/2+m/2, ...
                             end/2-n/2+1:end/2+n/2, ...
-                            end/2-l/2+1:end/2+l/2);
+                            end/2-l/2+1:end/2+l/2);  
+%                         A_k2 = A_k.^2;
+%                         A_k2 = gather(A_k2);
                         statistic_mean = statistic_mean + A_k;
                         statistic_std  = statistic_std + A_k.^2;
+                        % release GPU
+%                         A_k  = gather(A_k);
                         %                     A_k = A_k(wl+1:end-wl, wl+1:end-wl, :);
                         %               A_k = A_k(end/2-m/2+wavelength+1:end/2+m/2-wavelength, ...
                         %                         end/2-n/2+wavelength+1:end/2+n/2-wavelength, ...
@@ -1401,7 +1526,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
                         Inplane_direction_index_ori = Inplane_direction_index_ori.*(1-compare) + i.*compare;
                         Inplane_direction_index_zth = Inplane_direction_index_zth.*(1-compare) + j.*compare;
                         Inplane_direction_index_wl  = Inplane_direction_index_wl.*(1-compare) + w.*compare;
-                        Inplane_direction = Inplane_direction .*(1-compare) + A_k.*compare;
+                        Inplane_direction           = Inplane_direction .*(1-compare) + A_k.*compare;
                         %                     compare = A_k>=Inplane_direction(wl+1:end-wl, wl+1:end-wl, :); % logic larger or not
                         %                     Inplane_direction_index_ori(wl+1:end-wl, wl+1:end-wl, :)...
                         %                         = Inplane_direction_index_ori(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + i.*compare;
@@ -1409,6 +1534,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
                         %                         = Inplane_direction_index_zth(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + j.*compare;
                         %                     Inplane_direction(wl+1:end-wl, wl+1:end-wl, :)...
                         %                         = Inplane_direction(wl+1:end-wl, wl+1:end-wl, :).*(1-compare) + A_k.*compare;
+                        clear A_k;
                     end
                 end
                 clc;
@@ -1829,11 +1955,10 @@ classdef class_process_woven_RFdata < class_process_RFdata
             % drop: the ratio of drop, -3 dB, -6 dB or .....
             % filtertype: type of the filter.
             img_temp = abs(obj.(PropertyName));
-            img_temp = img_temp(:,:,zrange(1):zrange(2)); % select the range
+            img_temp = img_temp(:,:,zrange(1):min(end,zrange(2))); % select the range
             amp_max  = max(img_temp, [], 3, 'omitnan');
             % plot the 2d spectrum
             [m, n] = size(amp_max);
-            
             %             % ************* debug and EDA ***************** %
             %             inam_ex  = abs(obj.img_hil);
             %             inph_ex  = angle(obj.img_hil);
@@ -1902,7 +2027,6 @@ classdef class_process_woven_RFdata < class_process_RFdata
                 otherwise % no filter
                     amp_max_filter = amp_max;
             end
-            
             %             [Y, X]       = size(amp_max);
             %             cw           = [5 10 20 40];
             %             filtStruct   = createMonogenicFilters(Y, X, cw, 'lg', 0.66);
@@ -1934,6 +2058,116 @@ classdef class_process_woven_RFdata < class_process_RFdata
             Xd     = (1: m) / obj.fx * 1e3;
             Yd     = (1: n) / obj.fy * 1e3;
             cf = figure('Name', ['defect_amplitduedrop', '_', num2str(drop)]);
+            set(cf, 'Position', [-200, -200, 600, 800], 'color', 'white');
+            ax     = subplot(1, 1, 1);
+            imagesc(ax, Yd, Xd, amp_max_filter);
+            axis image;
+            colormap(ax, jet);
+            hold on;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman} Amp. (arb.)');
+            xlabel('\fontname {times new roman} X displacement (mm) ');
+            ylabel('\fontname {times new roman} Y displacement (mm)');
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 12);
+            set(ax, 'linewidth', 2);
+            % *** ground truth
+            % Morphological compute
+            se         = strel('disk',10);
+%             groudtruth = imclose(groudtruth, se);
+            groudtruth = imdilate(groudtruth, se);
+            %
+            ax     = subplot(1, 2, 2);
+            imagesc(ax, Yd, Xd, groudtruth);
+            axis image;
+            colormap(ax, gray);
+            hold on;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman} Truth of defect');
+            xlabel('\fontname {times new roman} X displacement (mm) ');
+            ylabel('\fontname {times new roman} Y displacement (mm)');
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 12);
+            set(ax, 'linewidth', 2);
+            % 
+            obj.ground_truth_depth = groudtruth;
+        end
+        
+        function obj = amplitude_drop_method_FWEfollow(obj, PropertyName, zrange, drop, filtertype)
+            % determine thoverall size of image damagas
+            % PropertyName: the name of the property in the object
+            % zrange: the z axis range to find the max amplitudes
+            % drop: the ratio of drop, -3 dB, -6 dB or .....
+            % filtertype: type of the filter.
+            img_temp = real(obj.(PropertyName));
+            front_I_temp = obj.front_I;
+            front_I_temp = medfilt2(front_I_temp, [5 5]);
+            [m, n, ~] = size(img_temp);
+            delay     = 300;
+            for i = 1:m
+                for j = 1:n
+                    A_scan   = squeeze(img_temp(i, j, :));
+                    front_Ia = front_I_temp(i, j);
+                    if front_Ia && sum(A_scan)~=0
+                        A_scan = circshift(A_scan, round(delay-front_Ia));
+                    end
+                    % resign
+                    img_temp(i, j, :)  = A_scan;
+                end
+                clc;
+                disp([num2str(i) '/' num2str(m)]);
+            end
+            img_temp = img_temp(:,:,zrange(1):zrange(2)); % select the range
+            amp_max  = max(abs(img_temp), [], 3, 'omitnan');
+            % plot the 2d spectrum
+            [m, n] = size(amp_max);
+            % now make 2D fft of original image
+            nfftx = 2^nextpow2(m);
+            nffty = 2^nextpow2(n);
+            nfftx = max(nfftx, nffty); % cannot tackle the issue of different nfftx and nffty.
+            nffty = max(nfftx, nffty);
+            %
+            fft2D         = fft2(amp_max, nfftx, nffty);
+            fft2D_shifted = fftshift(fft2D);
+            X              = -nfftx/2+1: nfftx/2;
+            Y              = -nffty/2+1:nffty/2;
+            cf = figure('Name', ['2Dspectrum', '_', num2str(zrange)]);
+            set(cf, 'Position', [0, 0, 600, 800], 'color', 'white');
+            ax     = subplot(1, 1, 1);
+            imagesc(X, Y, 20*log10(abs(fft2D_shifted)/m/n)); % divide by the x and y length: nfftx and nffty
+            axis image;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (dB)');
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
+            set(ax, 'linewidth', 2);
+            %             % *** 2d fft filter
+            switch filtertype{1}
+                case char('LP')
+                    prompt = 'What is the radius of the LP filter? ';
+                    D_0 = input(prompt);
+                    amp_max_filter = fx_lowpass_2dfft(amp_max, D_0, filtertype{2});
+                case char('BP')
+                    % Butterworth bandpass filter
+                    prompt = 'What is the radius of the BP filter? ';
+                    D_0 = input(prompt);
+                    prompt = 'What is the width of the BP filter? ';
+                    W = input(prompt);
+                    if strcmp(filtertype{2}, 'Butterworth')
+                        prompt = 'What is the order of the Butterworth filter? ';
+                    end
+                    n_bwf = input(prompt);
+                    amp_max_filter = fx_bandpass_2dfft(amp_max, D_0, W, filtertype{2}, n_bwf);
+                otherwise % no filter
+                    amp_max_filter = amp_max;
+            end
+            % find the average peak amplitudes
+            amp_max_mean = max(amp_max_filter, [], 'all');
+%             amp_max_mean = mean(amp_max_filter, 'all');
+            log_amp_max  = 20*log10(amp_max_filter);
+            groudtruth   = log_amp_max <= 20*log10(amp_max_mean) + drop;
+            % display
+            [m, n] = size(amp_max_filter);
+            Xd     = (1: m) / obj.fx * 1e3;
+            Yd     = (1: n) / obj.fy * 1e3;
+            cf = figure('Name', ['defect_amplitduedrop', '_', num2str(drop)]);
             set(cf, 'Position', [0, 0, 600, 800], 'color', 'white');
             ax     = subplot(2, 1, 1);
             imagesc(ax, Yd, Xd, amp_max_filter);
@@ -1947,6 +2181,13 @@ classdef class_process_woven_RFdata < class_process_RFdata
             set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
             set(ax, 'linewidth', 2);
             % ground truth
+            % Morphological compute
+            %             se         = strel('disk',10); % for cross-ply
+            %             groudtruth = imclose(groudtruth, se);
+            se = [0 1 0; 1 1 1; 0 1 0];
+            groudtruth = imdilate(groudtruth, se);
+            %             groudtruth = imdilate(groudtruth, se);
+            %
             ax     = subplot(2, 1, 2);
             imagesc(ax, Yd, Xd, groudtruth);
             axis image;
@@ -1958,8 +2199,8 @@ classdef class_process_woven_RFdata < class_process_RFdata
             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
             set(ax, 'Fontname', 'times new Roman', 'Fontsize', 16);
             set(ax, 'linewidth', 2);
+            obj.ground_truth_depth = groudtruth;
         end
-        
         
     end
 end

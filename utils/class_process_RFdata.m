@@ -102,6 +102,8 @@ classdef class_process_RFdata
         % color define
         inst_amp_color   = [53 192 117]/255
         inst_phase_color = [0 172 239]/255
+        % statistical metrics
+        ground_truth_depth
     end
     
     methods
@@ -162,13 +164,13 @@ classdef class_process_RFdata
             % read the settings from the .xlsx file with the same name as
             % .mat: fs, fx, fy...
             % the .xlsx file is produced by preprocess_Cscan_AS\main.py
-            [Samp, headertext] = xlsread(settinig_file, 'Settings');
-            obj.fs          = str2double(headertext{9, 1}); % read the samping frequency
-            if isnan(obj.fs)
-                obj.fs = Samp;
+            Samp = readtable(settinig_file);
+            Samprate = Samp.value(8); % read the samping frequency
+            if isempty(obj.fs)
+                obj.fs = str2double(Samprate);
             end
-            obj.fx          = 1e3 / str2double(headertext{23, 1}); % read the x step and turn it into fx: mm -> 1 / m
-            obj.fy          = 1e3 / str2double(headertext{25, 1}); % read the y step and turn it into fy: mm -> 1 / m
+            obj.fx          = 1e3 / str2double(Samp.value(22)); % read the x step and turn it into fx: mm -> 1 / m
+            obj.fy          = 1e3 / str2double(Samp.value(24)); % read the y step and turn it into fy: mm -> 1 / m
             % ! the sequcuse of x and y steps in the file are not confirmed
         end
         
@@ -225,6 +227,146 @@ classdef class_process_RFdata
             fx_showAS((1:length(ascan)) / obj.fs, ascan_hil, obj.fs);
         end
         
+        function show_Ascan_2dfft(obj, xs, ys, max_len)
+            % display the decomposed analytical signal of A scan
+            % x, y: index of the A scan
+            % reuse the fx_showAS
+            for xi = 1:length(xs)
+                x = xs(xi);
+                y = ys(xi);
+                ascan = real(squeeze(obj.img_hil(x, y, 1:max_len)));
+                L     = length(ascan);
+                t     = (1:L) / obj.fs * 1e6; % us
+                figure(1);
+                plot(t+ max(t)*xi/20, ascan+ 2*xi/10, '-', 'Linewidth', 2', 'Color', [0, 0, 0, 1/xi], 'DisplayName', 'original signal');
+                hold on;
+                axis off;
+                % 2nd fft
+                figure(2);
+                Y  = fft(ascan, L);
+                P2 = abs(Y/L);
+                P1 = P2(1: floor(L/2+1));
+                f  = obj.fs * (0:(L / 2)) / L / 1e6; % MHz
+                plot(f+ max(f)*xi/20, P1+ 0.05*xi/10, 'b-', 'Linewidth', 2, 'Color', [0, 0, 1, 1/xi]);
+                hold on;
+                axis off;
+                %
+                figure(3);
+                f_lo = find(f<=1, 1, 'last' ); f_up = find(f>=8, 1);
+                P1 = P1(f_lo:f_up);
+                P1 = cat(1, P1, zeros(L/2-(f_up-f_lo+1), 1));
+                Y_fft2 = fft(P1, L);
+                Y_fft2 = abs(Y_fft2(1: floor(end / 2)));
+                t_fft2 = (1:length(Y_fft2)) / obj.fs * 1e6; % us
+                plot(t_fft2+ max(t_fft2)*xi/20, Y_fft2+ 1*xi/10, '-', 'Linewidth', 2, 'Color', [0.6350 0.0780 0.1840, 1/xi]);
+                hold on;
+                axis off;
+%                 % *************************** relative quefrency cepstrum
+%                 %
+%                 temp_fft2_signal = fft(P1);
+%                 % t_space_2        = 0:2/Fs:L/Fs/2;
+%                 temp_fft2_signal = temp_fft2_signal(1:round(end/2));
+%                 % reference signal
+%                 A_scan_Ave   = obj.refer_Ascan_aligned;
+%                 A_scan_Ave   = real(A_scan_Ave);
+%                 temp_fft_Ave = fft(A_scan_Ave, L);
+%                 temp_fft_Ave = abs(temp_fft_Ave(1:round(end/2)));
+%                 % band selection
+%                 temp_fft_Ave  = temp_fft_Ave(f_lo:f_up);
+%                 temp_fft_Ave  = cat(1, temp_fft_Ave, zeros(L/2-(f_up-f_lo+1), 1));
+%                 temp_fft2     = fft(abs(temp_fft_Ave), L);
+%                 temp_fft2_ave = abs(temp_fft2(1:round(end/2)));
+%                 % substract
+%                 figure(4)
+%                 relative_ceps = abs(Y_fft2)/max(abs(Y_fft2)) - abs(temp_fft2_ave)/max(abs(temp_fft2_ave));
+%                 plot(t_fft2+ max(t_fft2)*xi/20, relative_ceps+ 1*xi/20, 'Linewidth', 2, 'Color', [0, 1, 0, 1/xi]);
+%                 hold on;
+            end
+        end
+        
+        function show_Ascan_timegate(obj, xs, ys, max_len)
+            % display the decomposed analytical signal of A scan
+            % x, y: index of the A scan
+            % reuse the fx_showAS
+            for xi = 1:length(xs)
+                x = xs(xi);
+                y = ys(xi);
+                ascan = real(squeeze(obj.img_hil(x, y, 1:max_len)));
+                L     = length(ascan);
+                t     = (1:L) / obj.fs * 1e6; % us
+                figure(1);
+                subplot(length(xs), 1, xi);
+                ax = plot(t, ascan, '-', 'Linewidth', 2', 'Color', [0, 0, 0, 1], 'DisplayName', 'original signal');
+                alpha(ax, .2);
+                hold on;
+                plot(t, abs(ascan), ':', 'Linewidth', 2, 'color', [0.8500 0.3250 0.0980], 'DisplayName', 'rectified signal');
+                %             title(('origin signal'), 'fontsize', 16, 'Fontname','times new Roman');
+                grid on;
+%                 xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16);
+                ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+                set(gca, 'fontsize', 16);
+                set(gca, 'linewidth', 2);
+                set(gca, 'fontname', 'times new roman');
+                xlim([1 6.5]);
+                if xi<length(xs)
+                    xticklabels('');
+                end
+                %
+                %                 subplot(length(xs), 2, (xi-1) * 2+2);
+                %                 plot(t, abs(ascan), 'b-', 'Linewidth', 1);
+                %                 %             title('single-sided amplitude spectrum', 'fontsize', 16, 'Fontname','times new Roman');
+                %                 xlabel('Time (\mus)');
+                %                 ylabel('Amplitude (arb.)');
+                %                 set(gca, 'fontsize', 16);
+                %                 set(gca, 'linewidth', 2);
+                lgd = legend;
+                lgd.FontSize = 16;
+                lgd.FontName = 'times new roman';
+                % 2nd fft
+                figure(2);
+                subplot(length(xs), 1, xi);
+                Y  = fft(ascan, L);
+                P2 = abs(Y/L);
+                P1 = P2(1: floor(L/2+1));
+                f  = obj.fs * (0:(L / 2)) / L / 1e6; % MHz
+                plot(f, P1, 'b-', 'Linewidth', 2);
+                %             title('single-sided amplitude spectrum', 'fontsize', 16, 'Fontname','times new Roman');
+                xlim([1 15]);
+                ylim([0 0.02]);
+%                 xlabel('Frequency (MHz)');
+                ylabel('Mag. (arb.)');
+                set(gca, 'fontsize', 16);
+                set(gca, 'linewidth', 2);
+                set(gca, 'fontname', 'times new roman');
+                hold on;
+                %
+                figure(3);
+                subplot(length(xs), 1, xi);
+                %
+%                 f_lo = find(f<=1e6, 1, 'last' ); f_up = find(f>=8e6, 1);
+%                 P1 = P1(f_lo:f_up);
+%                 P1 = cat(1, P1, zeros(L/2-(f_up-f_lo+1), 1));
+                Y_fft2 = fft(P1, L);
+                Y_fft2 = abs(Y_fft2(1: floor(end / 2+1)));
+                t_fft2 = (1:length(Y_fft2)) / obj.fs * 1e6; % us
+                plot(t_fft2, Y_fft2/max(Y_fft2), '-', 'Linewidth', 2, 'Color', [0.6350 0.0780 0.1840]);
+                %             title(['analytic-signal '],'fontsize',16,'Fontname','times new Roman');
+                grid on;
+%                 xlabel('\fontname {times new roman}Quefrency (\mus)', 'fontsize', 16);
+                ylabel('\fontname {times new roman}Mag. (arb.)', 'fontsize', 16);
+                set(gca, 'fontsize', 16);
+                set(gca, 'linewidth', 2);
+                xlim([0 4]);
+                ylim([0 0.2]);
+            end
+            figure(1);
+            xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16);
+            figure(2);
+            xlabel('Frequency (MHz)', 'fontsize', 16, 'FontName', 'times new roman');
+            figure(3); 
+            xlabel('\fontname {times new roman}Quefrency (\mus)', 'fontsize', 16);
+        end
+        
         function show_Ascan_inam_peaks(obj, x, y, MinPD, MinPH, PropertyName)
             % demonstrate the inam of a ascan
             % find the peaks in the inam
@@ -245,7 +387,7 @@ classdef class_process_RFdata
             A_inam = squeeze(inam(x, y, :));
             A_inph = squeeze(inph(x, y, :));
             figure;
-            ca     = subplot(2, 1, 1);
+            subplot(2, 1, 1);
             plot(t, A_inam, 'linewidth', 2);
             %             xlabel('\fontname {times new roman} Time(\mus) ', 'fontsize', 16);
             ylabel('\fontname {times new roman} Inst. amp.', 'fontsize', 16);
@@ -257,7 +399,7 @@ classdef class_process_RFdata
             locs_max          = locs(I);
             plot(t(locs_max), A_inam(locs_max), 'rv');
             hold on;
-            ca                = subplot(2, 1, 2);
+            subplot(2, 1, 2);
             plot(t, A_inph, 'linewidth', 2);
             %             xlabel('\fontname {times new roman} Time(\mus) ', 'fontsize', 16);
             ylabel('\fontname {times new roman} Inst. amp.', 'fontsize', 16);
@@ -290,11 +432,11 @@ classdef class_process_RFdata
             %             set(gca, 'linewidth', 2);
             %
             figure('Name', ['C_scan_amp' , '_', num2str(z)]);
-            C_scan = abs(obj.(PropertyName)(:, :, z));
+            C_scan = real(obj.(PropertyName)(:, :, z));
             ax = subplot(1, 1, 1);
             X = (1: size(C_scan, 1)) / obj.fx * 1e3;
             Y = (1: size(C_scan, 2)) / obj.fy * 1e3;
-            C_scan = medfilt2(C_scan, [10 10]);
+%             C_scan = medfilt2(C_scan, [10 10]);
             imagesc(ax, Y, X, C_scan)
             hold on;
             h = colorbar; colormap(jet);
@@ -326,18 +468,18 @@ classdef class_process_RFdata
             obj.C_scan_inam  = C_scan;
         end
         
-        function obj = addnoise(obj, snr)
+        function obj = addnoise(obj, snr, max_len)
             % add noise on the origin signal
             % snr: snr of the added noise
-            [lx, ly, lz] = size(obj.img_hil);
-            img_noiseadded = zeros(lx, ly, lz);
-            for i = 1:lx
-                for j = 1:ly
-                    img_noiseadded(i, j, :) =  awgn(obj.img_hil(i, j, :), snr, 'measured');
-                end
-                clc;
-                disp([num2str(i) '/' num2str(lx)]);
-            end
+            img_noiseadded = real(obj.img_hil);
+            img_noiseadded = img_noiseadded(:,:,1:max_len);
+            rng(1);
+            [lx, ly, lz]   = size(img_noiseadded);
+            sigPower       = sum(abs(img_noiseadded).^2, 3) / lz; % linear
+            reqSNR         = 10^(snr/10);
+            noisePower     = sigPower/reqSNR;
+            noise          = repmat(sqrt(noisePower), [1 1 lz]) .* randn(lx, ly, lz);
+            img_noiseadded = img_noiseadded + noise;
             obj.img_hil_noise =  img_noiseadded;
         end
         
@@ -361,7 +503,7 @@ classdef class_process_RFdata
             % including the functions of interpolation,
             % x, y: the x, y index to select the A scan
             % fig_subname: the subname for the fig
-            Ascan = squeeze(obj.img_hil_filter(x, y, :));
+            Ascan = squeeze(obj.img_hil(x, y, :));
             % remove the direct component
             Ascan   = Ascan - mean(Ascan);
             fss     = obj.fs;
@@ -370,7 +512,7 @@ classdef class_process_RFdata
             cf = figure('Name', strcat('Ascan_x', num2str(x), '_y', num2str(y), fig_subname) );
             set(cf, 'Position', [0, 0, 1000, 600], 'color', 'white');
             ca = subplot(1, 1, 1);
-            plot(ca, t_space, real(Ascan), 'linewidth', 2);
+            plot(ca, t_space, real(Ascan), 'k-', 'linewidth', 2);
             hold on;
             plot(ca, t_space, abs(hilbert(Ascan)), 'linewidth', 2);
             hold;
@@ -447,7 +589,7 @@ classdef class_process_RFdata
             if isempty(inph_ex)
                 inph_ex = obj.Inplane_direction_3D_ID;
             end
-            s = orthosliceViewer(infq_ex, 'Colormap', jet, 'DisplayRange', [-20e6 30e6]...
+            orthosliceViewer(infq_ex, 'Colormap', jet, 'DisplayRange', [-20e6 30e6]...
                 , 'ScaleFactors', [1 1 0.2]);
             %             s = orthosliceViewer(inam_ex, 'Colormap', jet, 'DisplayRange', [0 .5]...
             %                 , 'ScaleFactors', [1 1 0.2]);
@@ -685,94 +827,286 @@ classdef class_process_RFdata
             set(gca, 'linewidth', 2);
         end
         
-        function show_Ascan_addnoise(obj, x, y, noises_dbm, seed)
+        function show_Ascan_addnoise(obj, x, y, noises_dbm, seed, max_len)
             % display the decomposed analytical signal of A scan
             % x, y: index of the A scan
             % reuse the fx_showAS
-            ascan  = squeeze(obj.img(x, y, :));
+            ascan  = real(squeeze(obj.img_hil(x, y, :)));
+            ascan  = ascan(1:max_len);
             ascans = nan(length(ascan), length(noises_dbm));
+            rng(seed);
             for i = 1:length(noises_dbm)
-                ascans(:, i) = ascan + wgn(length(ascans), 1, noises_dbm(i), 1, seed);
-%                 ascans(:, i) = ascan + sqrt(10^(noises_dbm(i)/10))*randn(length(ascan), 1);
+                snr          = noises_dbm(i);
+                %                 ascans(:, i) = awgn(ascan, snr, 'measured');
+                sigPower     = sum(abs(ascan).^2) / numel(ascan); % linear
+                reqSNR       = 10^(snr/10);
+                noisePower   = sigPower/reqSNR;
+                ascans(:, i) = ascan + sqrt(noisePower)*randn(length(ascan), 1);
             end
-            t = (1:length(ascan))/obj.fs * 1e6; % us
-            figure('Name', strcat('Ascan_x', num2str(x), '_y', num2str(y), 'noises', num2str(noises_dbm(1))));
-            ca = subplot(length(noises_dbm)+1, 1, 1);
+            snr_ori = sum(abs(ascan).^2) / numel(ascan) ...
+                / (sum(abs(ascan(1:200)).^2) / 200);
+            snr_ori = 10 * log10(snr_ori);
+            disp(snr_ori);
+            t  = (1:length(ascan))/obj.fs * 1e6; % us
+            cf = figure('Name', strcat('Ascan_x', num2str(x), '_y', num2str(y), 'noises', num2str(noises_dbm(1))));
+            set(cf, 'Position', [1200, 0, 450, 900], 'color', 'white');
+            subplot(3,1,1);
             plot(t, ascan, 'k-', 'Linewidth', 2);
-            hold on;
-            plot(t, abs(hilbert(ascan)), 'b-', 'Linewidth', 2);
-            title('No added noise', 'FontSize', 16, 'FontName', 'times new roman');
+            %             hold on;
+            %             plot(t, abs(hilbert(ascan)), 'b-', 'Linewidth', 2);
+            %             title('No added noise', 'FontSize', 16, 'FontName', 'times new roman');
             ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
-            set(ca, 'fontsize', 16);
-            set(ca, 'linewidth', 2);
-            xlim([t(1) t(end)]);
-            for i = 1:length(noises_dbm)
-                ca = subplot(length(noises_dbm)+1, 1, i+1);
-                plot(t, ascans(:, i), 'k-', 'Linewidth', 2);
-                hold on;
-                plot(t, abs(hilbert(ascans(:, i))), 'b-', 'Linewidth', 2);
-                title(strcat('Added noise = ', num2str(noises_dbm(i)), ' dBW'), 'FontSize', 16, 'FontName', 'times new roman');
-                ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
-                set(ca, 'fontsize', 16);
-                set(ca, 'linewidth', 2);
-                xlim([t(1) t(end)]);
-            end
             xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16); % last row x label
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 2);
+            xlim([1 6.5]);
+            % 2nd fft
+            L  = length(ascan);
+            Y  = fft(ascan, L);
+            P2 = abs(Y/L);
+            P1 = P2(1: floor(L/2+1));
+            f  = obj.fs * (0:(L / 2)) / L / 1e6; % MHz
+            %
+            %             cf = figure;
+            subplot(3,1,2);
+            %             set(cf, 'Position', [0, 0, 400, 200], 'color', 'white');
+            plot(f, P1, 'b-', 'Linewidth', 2);
+            %             title('single-sided amplitude spectrum', 'fontsize', 16, 'Fontname','times new Roman');
+            xlim([1 15]);
+            ylim([0 0.02]);
+            %                 xlabel('Frequency (MHz)');
+            xlabel('\fontname {times new roman} Frequency (MHz)', 'fontsize', 16); % last row x label
+            ylabel('Mag. (arb.)');
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 2);
+            set(gca, 'fontname', 'times new roman');
+            hold on;
+            %
+            %             cf = figure;
+            subplot(3,1,3);
+            %             set(cf, 'Position', [0, 0, 400, 200], 'color', 'white');
+            %
+            f_lo = find(f<=1, 1, 'last' ); f_up = find(f>=8, 1);
+            P1 = P1(f_lo:f_up);
+            P1 = cat(1, P1, zeros(L/2-(f_up-f_lo+1), 1));
+            Y_fft2 = fft(P1, L);
+            Y_fft2 = abs(Y_fft2(1: floor(end / 2+1)));
+            t_fft2 = (1:length(Y_fft2)) / obj.fs * 1e6; % us
+            plot(t_fft2, Y_fft2/max(Y_fft2), '-', 'Linewidth', 2, 'Color', [0.6350 0.0780 0.1840]);
+            xlabel('\fontname {times new roman}Quefrency (\mus)', 'fontsize', 16);
+            ylabel('\fontname {times new roman}Mag. (arb.)', 'fontsize', 16);
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 2);
+            ylim([0 0.1]);
+            for i = 1:length(noises_dbm)
+                %                 ca = subplot(length(noises_dbm)+1, 1, i+1);
+                ascan = ascans(:, i);
+                cf = figure;
+            set(cf, 'Position', [1200, 0, 420, 900], 'color', 'white');
+                subplot(3,1,1);
+                plot(t, ascan, 'k-', 'Linewidth', 2);
+                %                 hold on;
+                %                 plot(t, abs(hilbert(ascans(:, i))), 'b-', 'Linewidth', 2);
+                %                 title(strcat('Added noise = ', num2str(noises_dbm(i)), ' dBW'), 'FontSize', 16, 'FontName', 'times new roman');
+                %                 ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+                set(gca, 'fontsize', 16);
+                set(gca, 'linewidth', 2);
+                xlim([1 6.5]);
+                %                 if i==length(noises_dbm)
+                xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16); % last row x label
+                yticks([]);
+                %                 end
+                % 2nd fft
+                L  = length(ascan);
+                Y  = fft(ascan, L);
+                P2 = abs(Y/L);
+                P1 = P2(1: floor(L/2+1));
+                f  = obj.fs * (0:(L / 2)) / L / 1e6; % MHz
+                %
+                %                 cf = figure;
+                %                 set(cf, 'Position', [0, 0, 400, 200], 'color', 'white');
+                subplot(3,1,2);
+                plot(f, P1, 'b-', 'Linewidth', 2);
+                %             title('single-sided amplitude spectrum', 'fontsize', 16, 'Fontname','times new Roman');
+                xlim([1 15]);
+                ylim([0 0.02]);
+                xlabel('\fontname {times new roman} Frequency (MHz)', 'fontsize', 16); % last row x label
+                yticks([]);
+                %                 ylabel('Mag. (arb.)');
+                set(gca, 'fontsize', 16);
+                set(gca, 'linewidth', 2);
+                set(gca, 'fontname', 'times new roman');
+                hold on;
+                %
+                %                 cf = figure;
+                %                 set(cf, 'Position', [0, 0, 400, 200], 'color', 'white');
+                subplot(3,1,3);
+                %
+                f_lo = find(f<=1, 1, 'last' ); f_up = find(f>=8, 1);
+                P1 = P1(f_lo:f_up);
+                P1 = cat(1, P1, zeros(L/2-(f_up-f_lo+1), 1));
+                Y_fft2 = fft(P1, L);
+                Y_fft2 = abs(Y_fft2(1: floor(end / 2+1)));
+                t_fft2 = (1:length(Y_fft2)) / obj.fs * 1e6; % us
+                plot(t_fft2, Y_fft2/max(Y_fft2), '-', 'Linewidth', 2, 'Color', [0.6350 0.0780 0.1840]);
+                %                 ylabel('\fontname {times new roman}Mag. (arb.)', 'fontsize', 16);
+                set(gca, 'fontsize', 16);
+                set(gca, 'linewidth', 2);
+                ylim([0 0.1]);
+                %                 if i==length(noises_dbm)
+                xlabel('\fontname {times new roman}Quefrency (\mus)', 'fontsize', 16);
+                yticks([]);
+                %                 end
+            end
         end
         
-        function show_Ascan_resample(obj, x, y, samling_rates)
+        function show_Ascan_resample(obj, x, y, samling_rates, max_len)
             % display the resampled signal of A scan
             % x, y: index of the A scan
             % reuse the fx_showAS
-            ascan  = squeeze(obj.img(x, y, :));
+            ascan  = real(squeeze(obj.img_hil(x, y, 1:max_len)));
             L      = length(ascan);
-            L      = 2^nextpow2(L);
             t      = (1:length(ascan))/obj.fs * 1e6; % us
-            cf1    = figure('Name', strcat('Ascan_x', num2str(x), '_y', num2str(y), 'resample_rate', num2str(samling_rates(1))));
-            cf2    = figure('Name', strcat('fft_x', num2str(x), '_y', num2str(y), 'resample_rate', num2str(samling_rates(1))));
-            cf3    = figure('Name', strcat('fft2_x', num2str(x), '_y', num2str(y), 'resample_rate', num2str(samling_rates(1))));
+            cf     = figure('Name', strcat('Ascan_x', num2str(x), '_y', num2str(y), 'resample_rate', num2str(samling_rates(1))));
+%             cf2    = figure('Name', strcat('fft_x', num2str(x), '_y', num2str(y), 'resample_rate', num2str(samling_rates(1))));
+%             cf3    = figure('Name', strcat('fft2_x', num2str(x), '_y', num2str(y), 'resample_rate', num2str(samling_rates(1))));
             %             ca = subplot(length(samling_rates)+1, 1, 1);
             %             plot(t, ascan, 'k-', 'Linewidth', 2);
-            figure(cf1);
+            set(cf, 'Position', [1200, 0, 450, 900], 'color', 'white');
+            subplot(3,1,1);
             plot(t, ascan);
             hold on;
-%             title(strcat('Sampling rate = ', num2str(obj.fs/1e6), ' MHz'), 'FontSize', 16, 'FontName', 'times new roman');
-%             ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
-%             set(ca, 'fontsize', 16);
-%             set(ca, 'linewidth', 2);
-%             xlim([t(1) t(end)]);
+            %             title(strcat('Sampling rate = ', num2str(obj.fs/1e6), ' MHz'), 'FontSize', 16, 'FontName', 'times new roman');
+            %             ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+            %             set(ca, 'fontsize', 16);
+            %             set(ca, 'linewidth', 2);
+            %             xlim([t(1) t(end)]);
             for i = 1:length(samling_rates)
-                figure(cf1);
+                %                 figure(cf1);
+                cf = figure;                
+                set(cf, 'Position', [1200, 0, 450, 900], 'color', 'white');
+                subplot(3,1,1)
                 % ca       = subplot(length(samling_rates)+1, 1, i+1);
                 rate     = samling_rates(i);
                 Fs_red   = obj.fs/rate;
                 t_ds     = t(1:rate:end);
                 ascan_ds = ascan(1:rate:end);
-                % plot(t_ds, ascan_ds, 'k-', 'Linewidth', 2);
-                plot(t_ds, ascan_ds);
-                hold on;
-                %                 title(strcat('Sampling rate = ', num2str(obj.fs/rate/1e6), ' MHz'), 'FontSize', 16, 'FontName', 'times new roman');
+                L        = length(ascan_ds);
+                plot(t_ds, ascan_ds, 'k-', 'Linewidth', 2);
+                %                 plot(t_ds, ascan_ds);
+                xlim([1 6.5]);
+                ylim([min(ascan_ds) max(ascan_ds)]);
                 %                 ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
-                %                 set(ca, 'fontsize', 16);
-                %                 set(ca, 'linewidth', 2);
-                %                 xlim([t(1) t(end)]);
-                figure(cf2);
-%                 ascan_ds  = cat(1, ascan_ds, zeros(L-length(ascan_ds), 1));
-                ascan_fft = abs(fft(ascan_ds));
-                f_red     = Fs_red/L*rate:Fs_red/L*rate:Fs_red/2;
-                f_lo      = find(f_red<=0.5e6, 1, 'last' );f_up = find(f_red>=10e6, 1);
-                ascan_fft = cat(1, ascan_fft(f_lo:f_up),zeros(L/2-(f_up-f_lo+1), 1));
+                set(gca, 'fontsize', 16);
+                set(gca, 'linewidth', 2);
+                hold on;
+                %                 if i==length(samling_rates)
+                xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16); % last row x label
+                yticks([]);
+                %                 end
+                % 2nd fft
+                Y  = fft(ascan_ds, L);
+                P2 = abs(Y/L);
+                P1 = P2(1: floor(L/2+1));
+                f  = Fs_red * (0:(L / 2)) / L / 1e6; % MHz
                 %
-                plot(ascan_fft);
-                hold on;
-%                 ascan_fft = cat(1, ascan_fft(1:end/2), zeros(L-length(ascan_fft), 1));
-                ascan_fft2 = abs(fft(ascan_fft));
-                ascan_fft2 = ascan_fft2/max(ascan_fft2);
-                figure(cf3);
-                plot(ascan_fft2)
-                hold on;
+                subplot(3,1,2);
+                plot(f, P1, 'b-', 'Linewidth', 2);
+                %             title('single-sided amplitude spectrum', 'fontsize', 16, 'Fontname','times new Roman');
+                xlim([1 15]);
+                ylim([0 0.02]);
+                xlabel('\fontname {times new roman} Frequency (MHz)', 'fontsize', 16); % last row x label
+                yticks([]);
+                %                 ylabel('Mag. (arb.)');
+                set(gca, 'fontsize', 16);
+                set(gca, 'linewidth', 2);
+                set(gca, 'fontname', 'times new roman');
+                %
+                subplot(3,1,3);
+                %
+                f_lo = find(f<=1, 1, 'last' ); f_up = find(f>=8, 1);
+                if isempty(f_up)
+                    f_up = length(P1);
+                end
+                P1 = P1(f_lo:f_up);
+                P1 = cat(1, P1, zeros(L*rate/2-(f_up-f_lo+1), 1));
+                Y_fft2 = fft(P1);
+                Y_fft2 = abs(Y_fft2(1: floor(end / 2+1)));
+                t_fft2 = (1:length(Y_fft2)) / obj.fs *2 * 1e6; % us
+                plot(t_fft2, Y_fft2/max(Y_fft2), '-', 'Linewidth', 2, 'Color', [0.6350 0.0780 0.1840]);
+                %                 ylabel('\fontname {times new roman}Mag. (arb.)', 'fontsize', 16);
+                set(gca, 'fontsize', 16);
+                set(gca, 'linewidth', 2);
+                ylim([0 0.1]);
+                %                 if i==length(samling_rates)
+                xlabel('\fontname {times new roman}Quefrency (\mus)', 'fontsize', 16);
+                yticks([]);
+                %                 end
             end
-            xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16); % last row x label
+        end
+        
+        function show_Ascan_resample_addnoise(obj, x, y, samling_rates, noise, max_len)
+            % display the resampled signal of A scan
+            % x, y: index of the A scan
+            % reuse the fx_showAS
+            ascan  = real(squeeze(obj.img_hil(x, y, 1:max_len)));
+            L      = length(ascan);
+            t      = (1:L)/obj.fs * 1e6; % us
+            for i = 1:length(samling_rates)
+                for j = 1:length(noise)
+                    cf = figure;
+                    set(cf, 'Position', [1200, 0, 850, 300], 'color', 'white');
+                    % ca       = subplot(length(samling_rates)+1, 1, i+1);
+                    rate     = samling_rates(i);
+                    t_ds     = t(1:rate:end);
+                    ascan_ds = ascan(1:rate:end);
+                    ascan_ds = awgn(ascan_ds, noise(j), 'measured', 1);
+                    L        = length(ascan_ds);
+                    plot(t_ds, ascan_ds, 'k-', 'Linewidth', 2);
+                    xlim([1 6.5]);
+                    ylim([min(ascan_ds) max(ascan_ds)]);
+                    ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
+                    set(gca, 'fontsize', 16);
+                    set(gca, 'linewidth', 2);
+                    hold on;
+                    xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16); % last row x label
+                    % 2nd fft
+                    Y  = fft(ascan_ds, L);
+                    P2 = abs(Y/L);
+                    P1 = P2(1: floor(L/2+1));
+                    f  = obj.fs/rate * (0:(L / 2)) / L / 1e6; % MHz
+                    %
+                    %                 subplot(3,1,2);
+                    cf = figure;
+                    set(cf, 'Position', [1200, 0, 850, 300], 'color', 'white');
+                    plot(f, P1, 'b-', 'Linewidth', 2);
+                    %             title('single-sided amplitude spectrum', 'fontsize', 16, 'Fontname','times new Roman');
+                    xlim([1 15]);
+                    ylim([0 0.02]);
+                    xlabel('\fontname {times new roman} Frequency (MHz)', 'fontsize', 16); % last row x label
+                    ylabel('Mag. (arb.)');
+                    set(gca, 'fontsize', 16);
+                    set(gca, 'linewidth', 2);
+                    set(gca, 'fontname', 'times new roman');
+                    %
+                    cf = figure;
+                    set(cf, 'Position', [1200, 0, 850, 300], 'color', 'white');
+                    %
+                    f_lo = find(f<=1, 1, 'last' ); f_up = find(f>=8, 1);
+                    P1 = P1(f_lo:f_up);
+                    P1 = cat(1, P1, zeros(L*rate/2-(f_up-f_lo+1), 1));
+                    Y_fft2 = fft(P1);
+                    Y_fft2 = abs(Y_fft2(1: floor(end / 2+1)));
+                    t_fft2 = (1:length(Y_fft2)) / obj.fs*2 * 1e6; % us
+                    plot(t_fft2, Y_fft2/max(Y_fft2), '-', 'Linewidth', 2, 'Color', [0.6350 0.0780 0.1840]);
+                    ylabel('\fontname {times new roman}Mag. (arb.)', 'fontsize', 16);
+                    set(gca, 'fontsize', 16);
+                    set(gca, 'linewidth', 2);
+                    ylim([0 0.1]);
+                    xlabel('\fontname {times new roman}Quefrency (\mus)', 'fontsize', 16);
+                end
+            end
+%             xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16); % last row x label
         end
         
         function show_Ascan_freqManipulation(obj, x, y, Fcs)
@@ -832,10 +1166,33 @@ classdef class_process_RFdata
             obj.img_hil_noise =  img_noiseadded;
         end
         
+        function obj = data_downsample_addnoise(obj, rate, snr, max_len)
+            % downsample the origin signal and add noise
+            % rate: downsample rate
+            % snr: SNR
+            img_noiseadded = real(obj.img_hil);
+            img_noiseadded = img_noiseadded(:,:,1:rate:max_len);
+            rng(1);
+            [lx, ly, lz]   = size(img_noiseadded);
+            sigPower       = sum(abs(img_noiseadded).^2, 3) / lz; % linear
+            reqSNR         = 10^(snr/10);
+            noisePower     = sigPower/reqSNR;
+            noise          = repmat(sqrt(noisePower), [1 1 lz]) .* randn(lx, ly, lz);
+            img_noiseadded = img_noiseadded + noise;
+%             for i = 1:lx
+%                 for j = 1:ly
+%                     img_noiseadded(i, j, :) =  awgn(img_noiseadded(i, j, :), snr, 'measured', 1);
+%                 end
+%                 clc;
+%                 disp([num2str(i) '/' num2str(lx)]);
+%             end
+            obj.img_hil_noise =  img_noiseadded;
+        end
+        
         function obj = data_freqManipulation(obj, Fc)
             % manipulate the frequency
             % rate: downsample rate
-            [lx, ly, lz]   = size(obj.img_hil);
+            [~, ~, lz]   = size(obj.img_hil);
 %             img_noiseadded = zeros(lx, ly, lz);
             % reference signal and generate new Gaussian pulse
             refer_ascan      = obj.refer_Ascan_aligned;
@@ -881,7 +1238,7 @@ classdef class_process_RFdata
             rear_I_temp  = obj.rear_I(x1:min(end, x2), y1:min(end, y2));
             amp_front    = NaN(size(front_I_temp));
             amp_rear     = NaN(size(rear_I_temp));
-            A_scan       = squeeze(mean(inam_img, [1 2]));
+%             A_scan       = squeeze(mean(inam_img, [1 2]));
             for i = 1:size(inam_img, 1)
                 for j = 1:size(inam_img, 2)
                     % if front index is out of boundary, set mean
@@ -918,7 +1275,7 @@ classdef class_process_RFdata
             % calculate the inam
             % The sequence is changed unexpectedly. Transverse the matrix
             inam         = abs(obj.(PropertyName));
-            inph         = angle(obj.(PropertyName));
+%             inph         = angle(obj.(PropertyName));
             % the time domain
             t            = (1:max_len);
             front_I_temp = NaN(size(inam, 1), size(inam, 2));
@@ -927,7 +1284,7 @@ classdef class_process_RFdata
             for i = 1:size(inam, 1)
                 for j = 1:size(inam, 2)
                     A_inam            = squeeze(inam(i, j, 1:max_len));
-                    A_inph            = squeeze(inph(i, j, 1:max_len));
+%                     A_inph            = squeeze(inph(i, j, 1:max_len));
                     [pks, locs, ~, ~] = findpeaks(A_inam, t, 'MinPeakDistance', MinPD, 'MinPeakHeight', MinPH);
                     %                     % sort the peaks
                     %                     [~, I] = sort(pks);
@@ -1037,7 +1394,7 @@ classdef class_process_RFdata
             obj.rear_I_pre  = rear_I_temp;
         end
         
-        function obj = find_front_amp_alpha_maxfront(obj,  MinPD, MinPW, PropertyName, max_len, alpha, A_ratio)
+        function obj = find_front_amp_alpha_maxfront(obj,  ~, MinPW, PropertyName, max_len, alpha, A_ratio)
             % determining the front surface index by amp.
             % obj.rear_i is also intially determined here
             % define the delamination by the attenuated threshold!
@@ -1573,7 +1930,7 @@ classdef class_process_RFdata
                     %                         temp_fft2 = temp_fft2(1:end/2);
                     %                     end
                     %
-                    [M,I] = max(temp_fft2_signal(delay:end));
+                    [~,I] = max(temp_fft2_signal(delay:end));
                     rear_I_temp(i, j)  = 2*(I + delay);
                     %                     [pks, locs, ~, ~]  = findpeaks(abs(temp_fft2_signal), 1:length(temp_fft2_signal), 'SortStr', 'descend');
                     %                     rear_I_temp(i, j)  = 2*locs(1);
@@ -1608,7 +1965,7 @@ classdef class_process_RFdata
             %             obj.depth_2D = rear_I_temp;
         end
         
-        function obj = find_damage_timewin(obj, PropertyName, max_len, flag, delay, front_I_max, sampling_rate)
+        function obj = find_damage_timewin(obj, PropertyName, max_len, flag, delay, front_I_max, sampling_rate, ~)
             % determining the depth image by time domain method
             % define the delamination by the attenuated threshold!
             % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
@@ -1629,26 +1986,28 @@ classdef class_process_RFdata
             img_temp_fft = fft(img_temp, [], 3);
             img_temp_fft = cat(3, img_temp_fft(:,:,1:end/2), zeros(m, n, l*sampling_rate-l/2));
 %             img_temp_fft  = cat(3, img_temp_fft(:,:,1:end/2), zeros(m, n, 1500-l/2));
-            img_temp     = abs(ifft(img_temp_fft, [], 3, 'nonsymmetric'));
+            img_temp     = real(ifft(img_temp_fft, [], 3, 'nonsymmetric'));
             map_depth    = nan(m, n);
             map_amp      = nan(m, n);
-            %             [~, front_II] = max(img_temp(:,:, 1:front_I_max), [], 3);
-            %             front_I_ave   = mean(front_II, 'all');
-%             max_len     = max_len/sampling_rate;
-%             delay       = delay/sampling_rate;
-%             front_I_max = front_I_max/sampling_rate;
+            [~, front_II] = max(img_temp(:,:, 1:front_I_max), [], 3);
+            front_I_ave   = mean(front_II, 'all');
+            %             max_len     = max_len/sampling_rate;
+            %             delay       = delay/sampling_rate;
+            %             front_I_max = front_I_max/sampling_rate;
             for i = 1:m
                 for j = 1:n
                     A_scan          = squeeze(img_temp(i, j, 1:min(end,max_len)));
                     [~, front_II]   = max(A_scan(1:round(front_I_max)));
-                    [M,I]           = max(A_scan(round(front_II+delay): end));
+                    [M,I]           = max(abs(A_scan(round(front_II+delay): end)));
 %                     [M,I]           = max(A_scan(round(front_I_ave+delay): end));
                     map_amp(i, j)   = M;
                     map_depth(i, j) = I + delay;
                     % for debug
-                    if flag == 1 && i==160 && j==60
+                    if flag == 1 && i==365 && j==340
                         figure,
                         plot(A_scan, 'LineWidth', 2);
+                        hold on;
+                        plot(abs(A_scan), 'LineWidth', 2);
                     end
                 end
                 clc;
@@ -1658,33 +2017,78 @@ classdef class_process_RFdata
             Y      = (1:m) / obj.fy * 1e3;
             X      = (1:n) / obj.fx * 1e3;
             % depth
-            cf = figure('Name', 'Internal_damage_TOF');
+            cf = figure('Name', 'Internal_damage_TOF_');
             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
-            h = imagesc(X, Y, map_depth/obj.fs/2 * 3000 * 1e3);
+                        map_depth = map_depth .* 3000 ./ obj.fs * 1e3 / 2;
+%             map_depth = map_depth ./ obj.fs * 1e6;
+            h         = imagesc(X, Y, map_depth);
             set(h, 'AlphaData', 1-isnan(map_depth))
             hold on; colormap jet;
             h = colorbar;
             caxis([0 6]);
             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
+%             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} TOF (\mus)');
             set(gca, 'fontsize', 16);
             set(gca, 'linewidth', 1.5);
             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
-%             % amplitude
-%             cf = figure('Name', 'Internal_damage_TOF');
-%             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
-%             h = imagesc(X, Y, map_amp);
-%             set(h, 'AlphaData', 1-isnan(map_amp))
-%             hold on; colormap jet;
-%             h = colorbar;
-%             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
-%             set(gca, 'fontsize', 16);
-%             set(gca, 'linewidth', 1.5);
-%             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
-%             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            % amplitude
+            cf = figure('Name', 'Internal_damage_TOF');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            h = imagesc(X, Y, map_amp);
+            set(h, 'AlphaData', 1-isnan(map_amp))
+            hold on; colormap jet;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            obj.depth_2D = map_depth;
+            %************************* Gaussian fitting ********************
+            nbins          = 500;
+            map_depth      = map_depth(:);
+            [Idof_N, edges]= histcounts(map_depth, nbins);
+            %             centers      = [0 45 90 135];
+            %             sigmas       = [8 8 8 8];
+            %             amplitudes   = [1 1 1 1];
+            %             centers      = [45 90 135];
+            %             sigmas       = [8 8 8];
+            %             amplitudes   = [1 1 1];
+            %             numGaussians = 4;
+            %             [amp, parameter, ~] = fx_multi_Gaussianfitting(...
+            %                 numGaussians, Idof_edge(1:180), Idof_N, centers, sigmas, amplitudes);
+            %             [~, amp_I]      = max(amp'.*parameter(2:2:end));
+            %             m_fiber_angle   = parameter(amp_I*2-1);
+            %             %             std_fiber_angle = amp(amp_I);
+            %             %
+            %             std_fiber_angle = std(image_orientation, 0, 'all','omitnan');
+            %             disp(['mean:' num2str(m_fiber_angle) '. std:' num2str(std_fiber_angle)]);
+            % ********** plot 1D distribution
+            figure('Name', 'depth_distribution_ID_2dfft_reference');
+            set(gcf, 'Position', [0, 0, 800, 400], 'color', 'white');
+            bar(edges(2:end), Idof_N/sum(Idof_N), 'BarWidth', 1.2);
+            n            = 24;
+            kurtosis_all = nan(n, 1);
+            for i = 0.5:1:n-0.5
+                hold on;
+                xline(i*5.5/24, '--');
+                %                 distribute_k = Idof_N(round(i*end/n): round(min((i+1)*end/n, end)));
+                %                 kurtosis_all(ceil(i)) = kurtosis(distribute_k);
+                distribute_k          = map_depth(map_depth>i*5.5/n& map_depth<=(i+1)*5.5/n);
+                if length(distribute_k) > 100
+                    kurtosis_all(ceil(i)) = std(distribute_k);
+                end
+            end
+            disp(kurtosis_all);
+            xlabel('\fontname {times new roman} Depth (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Normalized value', 'fontsize', 16);
+            set(gca, 'Fontname', 'times new Roman', 'FontSize', 16);
+            set(gca, 'linewidth', 2);
+            obj.front_I = front_II;
         end
         
-        function obj = find_damage_timewin_asignsurface(obj, PropertyName, max_len, flag, delay, front_I_max, sampling_rate)
+        function obj = find_damage_timewin_asignsurface(obj, PropertyName, max_len, flag, delay, front_I_max, ~)
             % determining the depth image by time domain method
             % define the delamination by the attenuated threshold!
             % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
@@ -1738,7 +2142,7 @@ classdef class_process_RFdata
             obj.rear_I      = rear_I_temp;
         end
         
-        function obj = find_surface_cepstrum(obj, PropertyName, max_len, flag, delay, f_win)
+        function obj = find_surface_cepstrum(obj, PropertyName, max_len, ~, delay, f_win)
             % determining the front surface index by cepstrum
             % ****
             % calculate the inam
@@ -1753,7 +2157,6 @@ classdef class_process_RFdata
             for i = 2:m
                 for j = 1:n
                     A_scan = real(squeeze(img_temp(i, j, 1:max_len)));
-                    L      = length(A_scan);
                     % 2 times fft
                     L         = length(A_scan);
                     nfft      = 2^nextpow2(L);
@@ -1768,7 +2171,7 @@ classdef class_process_RFdata
                     %                     else
                     %                         temp_fft2 = temp_fft2(1:end/2);
                     %                     end
-                    [M,I] = min(abs(temp_fft2(delay:round(end/2))));
+                    [~,I] = min(abs(temp_fft2(delay:round(end/2))));
                     rear_I_temp(i, j) = 2*(I + delay);
                 end
                 clc;
@@ -1777,7 +2180,7 @@ classdef class_process_RFdata
             obj.depth_2D    = rear_I_temp;
         end
         
-        function obj = find_surface_2fft_imaging_window(obj, PropertyName, max_len, delay, filter_flag, bwrs, sampling_rate)
+        function obj = find_surface_2fft_imaging_window(obj, PropertyName, ~, delay, ~, ~, sampling_rate)
             % determining the front surface index by 2 times fft and
             % imaging
             % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
@@ -1796,18 +2199,12 @@ classdef class_process_RFdata
             [m, n, lz] = size(img_temp);
             %             front_I_temp  = NaN(m, n);
             L = lz*2;
-%             L = 2^nextpow2(lz);
+            %             L = 2^nextpow2(lz);
             % fft and fft2
             temp_fft = fft(img_temp, L, 3);
-%             temp_fft = temp_fft(:, :, 1:round(end/2)); % select the range
-            if filter_flag
-                % *********** without log funciton
-                temp_fft_abs = abs(temp_fft);
-                % *****************
-            else
-                % *********** without log funciton
-                temp_fft_abs = abs(temp_fft);
-            end
+            %             temp_fft = temp_fft(:, :, 1:round(end/2)); % select the range
+            % *********** without log funciton
+            temp_fft_abs = abs(temp_fft);
             % *********** band selection **********
             %             w = hann(round(10e6/obj.fs*sampling_rate*L));
             %             temp_fft_abs = bsxfun(@times, temp_fft_abs, ...
@@ -1815,28 +2212,28 @@ classdef class_process_RFdata
             Fs_red       = obj.fs/sampling_rate;
             f_red        = Fs_red/L:Fs_red/L:Fs_red/2;
             f_lo         = find(f_red<=0.5e6, 1, 'last' );f_up = find(f_red>=8e6, 1);
-%             L_ori        = 2^nextpow2(size(img_temp, 3)*sampling_rate);
+            %             L_ori        = 2^nextpow2(size(img_temp, 3)*sampling_rate);
             L_ori        = L*sampling_rate;
             temp_fft_abs = cat(3, temp_fft_abs(:,:,f_lo:f_up), zeros(m, n, L_ori/2-(f_up-f_lo+1)));
             % % **********
             temp_fft2_signal = fft(temp_fft_abs, [], 3);
             temp_fft2_signal = abs(temp_fft2_signal(:,:,1:round(end/2)));
             temp_fft2_signal = bsxfun(@rdivide, temp_fft2_signal, max(temp_fft2_signal, [], 3));
-%             % *** find peaks
-%             map_depth = nan(m, n);
-%             map_amp   = nan(m, n);
-%             for i = 2:m
-%                 for j = 1:n
-%                     Ascan       = squeeze(temp_fft2_signal(i ,j, :));
-% %                     Ascan_diff  = diff(Ascan);
-% %                     Ascan_diff2 = diff(Ascan_diff);
-%                     [pks,locs]     = findpeaks(Ascan);
-%                     [map_amp(i,j), I_max] = max(pks);
-%                     map_depth(i,j) = locs(I_max);
-%                 end
-%                 clc;
-%                 fprintf('searching progress: %0.2f%%\n',100*i/m);
-%             end
+            %             % *** find peaks
+            %             map_depth = nan(m, n);
+            %             map_amp   = nan(m, n);
+            %             for i = 2:m
+            %                 for j = 1:n
+            %                     Ascan       = squeeze(temp_fft2_signal(i ,j, :));
+            % %                     Ascan_diff  = diff(Ascan);
+            % %                     Ascan_diff2 = diff(Ascan_diff);
+            %                     [pks,locs]     = findpeaks(Ascan);
+            %                     [map_amp(i,j), I_max] = max(pks);
+            %                     map_depth(i,j) = locs(I_max);
+            %                 end
+            %                 clc;
+            %                 fprintf('searching progress: %0.2f%%\n',100*i/m);
+            %             end
             [M,I]     = max(temp_fft2_signal(:, :, delay:end), [], 3);
             map_depth = I + delay;
             map_amp   = M;
@@ -1856,21 +2253,22 @@ classdef class_process_RFdata
             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
             caxis([0 6]);
-%             % amplitude
-%             cf = figure('Name', 'Internal_damage_TOF');
-%             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
-%             h = imagesc(X, Y, map_amp);
-%             set(h, 'AlphaData', 1-isnan(map_amp))
-%             hold on; colormap jet;
-%             h = colorbar;
-%             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
-%             set(gca, 'fontsize', 16);
-%             set(gca, 'linewidth', 1.5);
-%             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
-%             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            % amplitude
+            cf = figure('Name', 'Internal_damage_TOF');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            h = imagesc(X, Y, map_amp);
+            set(h, 'AlphaData', 1-isnan(map_amp))
+            hold on; colormap jet;
+            %             h = colorbar;
+            %             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            %             set(gca, 'fontsize', 16);
+            %             set(gca, 'linewidth', 1.5);
+            %             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            %             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
         end
         
-        function obj = find_surface_2fft_imaging_reference(obj, PropertyName, max_len, filter_flag, bwrs,sampling_rate)
+        function [obj, map_depth_BWE] = find_surface_2fft_imaging_reference( ...
+                obj, PropertyName, max_len, filter_flag, bwrs,sampling_rate, figurename)
             % determining the front surface index by 2 times fft and
             % imaging
             % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
@@ -1878,19 +2276,22 @@ classdef class_process_RFdata
             % ****
             % calculate the inam
             % The sequence is changed unexpectedly. Transverse the matrix
-            img_temp  = real(obj.(PropertyName));
+            img_temp = real(obj.(PropertyName));
+            if strcmp(PropertyName, 'img_hil')
+                sampling_rate = 1;
+            end
+            img_temp = img_temp(:,:,1:max_len/sampling_rate);
             %             inph         = angle(obj.(PropertyName));
             % the time domain
             %             t         = (1:max_len);
-            % ave
             [m, n, lz] = size(img_temp);
             %             front_I_temp  = NaN(m, n);
-            %
             L = lz*2;
             %             L = 2^nextpow2(L);
             % *********** reference
-%             A_scan_Ave = squeeze(mean(img_temp(1:10,1:10,1:end/2), [1, 2]));
-            A_scan_Ave    = obj.refer_Ascan_aligned;
+            A_scan_Ave = squeeze(mean(img_temp(5:15,1:20,200/sampling_rate:380/sampling_rate), [1, 2]));
+%             A_scan_Ave = obj.refer_Ascan_aligned;
+%             A_scan_Ave = A_scan_Ave(1:sampling_rate:end); % downsampling
             temp_fft   = fft(A_scan_Ave, L);
             temp_fft   = temp_fft(1:round(end/2));
             if filter_flag
@@ -1913,9 +2314,12 @@ classdef class_process_RFdata
             % *********** band selection **********
             Fs_red = obj.fs/sampling_rate;
             f_red  = Fs_red/L:Fs_red/L:Fs_red/2;
-            f_lo   = find(f_red<=1e6, 1, 'last' );f_up = find(f_red>=8e6, 1);
-%             L_ori        = 2^nextpow2(size(img_temp, 3)*sampling_rate);
-            mL_ori        = L*sampling_rate;
+            f_lo   = find(f_red<=2e6, 1, 'last' );f_up = find(f_red>=7.5e6, 1);
+            if isempty(f_up)
+                f_up = length(f_red);
+            end
+            %             L_ori        = 2^nextpow2(size(img_temp, 3)*sampling_rate);
+            mL_ori        = L*sampling_rate * 2;
             temp_fft_ave  = cat(1, temp_fft_ave(f_lo:f_up), zeros(mL_ori/2-(f_up-f_lo+1), 1));
             temp_fft2_ave = fft(temp_fft_ave);
             temp_fft2_ave = abs(temp_fft2_ave(1:end/2));
@@ -1923,50 +2327,81 @@ classdef class_process_RFdata
             temp_fft     = fft(img_temp, L, 3);
             temp_fft     = temp_fft(:, :, 1:round(end/2)); % select the range
             temp_fft_abs = abs(temp_fft);
-%             % ********** divide ref. *********
-%             temp_fft_abs = bsxfun(@rdivide, temp_fft_abs, permute(temp_fft_ave/max(temp_fft_ave), [2, 3, 1]));
+            %             % ********** divide ref. *********
+            %             temp_fft_abs = bsxfun(@rdivide, temp_fft_abs, permute(temp_fft_ave/max(temp_fft_ave), [2, 3, 1]));
             % *********** band selection **********
             temp_fft_abs = cat(3, temp_fft_abs(:, :, f_lo:f_up), zeros(m, n, mL_ori/2-(f_up-f_lo+1)));
             % % **********
-            temp_fft2_signal         = fft(temp_fft_abs, L/2, 3);
+            temp_fft2_signal         = fft(temp_fft_abs, [], 3);
             temp_fft2_signal         = abs(temp_fft2_signal(:,:,1:round(end/2)));
             temp_fft2_signal(:,:, 1) = 0; % first value is extraordinary
             temp_fft2_signal = bsxfun(@rdivide, temp_fft2_signal, max(temp_fft2_signal, [], 3));
             temp_fft2_signal = bsxfun(@minus, temp_fft2_signal, permute(temp_fft2_ave/max(temp_fft2_ave), [2, 3, 1]));
-            [M,I]            = max(temp_fft2_signal, [], 3);
+            [M, I]            = max(temp_fft2_signal, [], 3);
             map_depth        = I;
             map_amp          = M;
             % imaging
             Y      = (1:m) / obj.fy * 1e3;
             X      = (1:n) / obj.fx * 1e3;
             % depth
-            cf = figure('Name', 'Internal_damage_TOF_2fft_reference');
+            cf = figure('Name', ['Internal_damage_TOF_2fft_reference', figurename]);
             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
-            h = imagesc(X, Y, map_depth .* 3000 ./ obj.fs * 1e3);
+            map_depth = map_depth .* 3000 ./ obj.fs * 1e3 / 2;
+            h         = imagesc(X, Y, map_depth);
             set(h, 'AlphaData', 1-isnan(map_depth))
             hold on; colormap jet;
-            h = colorbar; 
+            h = colorbar;
             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
             set(gca, 'fontsize', 16);
             set(gca, 'linewidth', 1.5);
             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
             caxis([0 6]);
-%             % amplitude
-%             cf = figure('Name', 'Internal_damage_TOF');
-%             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
-%             h = imagesc(X, Y, map_amp);
-%             set(h, 'AlphaData', 1-isnan(map_amp))
-%             hold on; colormap jet;
-%             h = colorbar;
-%             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
-%             set(gca, 'fontsize', 16);
-%             set(gca, 'linewidth', 1.5);
-%             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
-%             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            % amplitude
+            cf = figure('Name', 'Internal_damage_TOF');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            h = imagesc(X, Y, map_amp);
+            set(h, 'AlphaData', 1-isnan(map_amp))
+            hold on; colormap jet;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            nbins          = 500;
+            [Idof_N, edges]= histcounts(map_depth(:), nbins);
+            % ********** plot 1D distribution
+            figure('Name', ['depth_distribution_ID' '_' '2dfft_reference' figurename]);
+            set(gcf, 'Position', [0, 0, 800, 400], 'color', 'white');
+            bar(edges(2:end), Idof_N/sum(Idof_N), 'BarWidth', 1.2);
+            n = 24;
+            kurtosis_all = nan(n, 1);
+            for i = 0.5:1:n-0.5
+                hold on;
+                xline(i*5.5/24, '--');
+                %                 distribute_k = Idof_N(round(i*end/n): round(min((i+1)*end/n, end)));
+                %                 kurtosis_all(ceil(i)) = kurtosis(distribute_k);
+                distribute_k          = map_depth(map_depth>i*5.5/n& map_depth<=(i+1)*5.5/n);
+                if length(distribute_k) > 100
+                    kurtosis_all(ceil(i)) = std(distribute_k);
+                end
+            end
+            disp(kurtosis_all);
+            xlabel('\fontname {times new roman} Depth (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Normalized value', 'fontsize', 16);
+            set(gca, 'Fontname', 'times new Roman', 'FontSize', 16);
+            set(gca, 'linewidth', 2);
+            % statistical analysis
+            ground_truth_BWE = obj.ground_truth_depth;
+            map_depth_BWE = map_depth;
+            map_depth_BWE(ground_truth_BWE) = nan;
+%             stat_mean = mean(map_depth_BWE,'all', 'omitnan');
+%             stat_std  = std(map_depth_BWE, [], 'all', 'omitnan');
+            obj.depth_2D = map_depth;
         end
         
-        function obj = find_surface_2fft_imaging_diff(obj, PropertyName, max_len, filter_flag, bwrs, sampling_rate)
+        function obj = find_surface_2fft_imaging_diff(obj, PropertyName, ~, filter_flag, ~, sampling_rate)
             % determining the front surface index by 2 times fft and
             % imaging
             % PropertyName: 'img_hil' or 'img_hil_filter' ... used for the inam.
@@ -2008,7 +2443,7 @@ classdef class_process_RFdata
                 % *********** without log funciton
                 temp_fft_abs = unwrap(angle(temp_fft));
             end
-%             temp_fft_abs = diff(temp_fft_abs, 1, 3) ./ temp_fft_abs(:, :, 2:end);
+            %             temp_fft_abs = diff(temp_fft_abs, 1, 3) ./ temp_fft_abs(:, :, 2:end);
             % *********** band selection **********
             Fs_red = obj.fs/sampling_rate;
             f_red  = Fs_red/L:Fs_red/L:Fs_red/2;
@@ -2050,14 +2485,14 @@ classdef class_process_RFdata
             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
             ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
             caxis([0 6]);
-            %             % amplitude
-            %             cf = figure('Name', 'Internal_damage_TOF');
-            %             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
-            %             h = imagesc(X, Y, map_amp);
-            %             set(h, 'AlphaData', 1-isnan(map_amp))
-            %             hold on; colormap jet;
-            %             h = colorbar;
-            %             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
+            % amplitude
+            cf = figure('Name', 'Internal_damage_TOF');
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            h = imagesc(X, Y, map_amp);
+            set(h, 'AlphaData', 1-isnan(map_amp))
+            hold on; colormap jet;
+            h = colorbar;
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Amp. (arb.)');
             %             set(gca, 'fontsize', 16);
             %             set(gca, 'linewidth', 1.5);
             %             xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
@@ -2080,7 +2515,7 @@ classdef class_process_RFdata
             [m, n, lz] = size(img_temp);
             %             front_I_temp  = NaN(m, n);
             L = lz*2;
-%             L = 2^nextpow2(L); % zero padding for higher freq. resolution
+            %             L = 2^nextpow2(L); % zero padding for higher freq. resolution
             % fft and fft2
             temp_fft = fft(img_temp, L, 3);
             temp_fft = temp_fft(:, :, 1:round(end/2)); % select the range
@@ -2089,8 +2524,8 @@ classdef class_process_RFdata
                 temp_fft_abs = abs(temp_fft);
                 % *****************
             else
-                % *********** without log funciton
-                temp_fft_abs = abs(temp_fft);
+                % *********** with log funciton
+                temp_fft_abs = log(abs(temp_fft));
             end
             % *********** wavelet ************
             wv = 'db3';
@@ -2101,13 +2536,13 @@ classdef class_process_RFdata
                     % remove
                     c(1:l(1))    = 0 * c(1:l(1));
                     c(l(1):l(2)) = 0.5 * c(l(1):l(2));
-%                     c(l(2):l(3)) = 0.5 * c(l(2):l(3));
+                    %                     c(l(2):l(3)) = 0.5 * c(l(2):l(3));
                     temp_fft_abs(i ,j ,:) = waverec(c,l,wv);
                 end
                 clc;
                 fprintf('wavelet progress: %0.2f%%\n',100*i/m);
-             end
-            % ***********************           
+            end
+            % ***********************
             % *********** band selection **********
             Fs_red       = obj.fs/sampling_rate;
             f_red        = Fs_red/L:Fs_red/L:Fs_red/2;
@@ -2118,9 +2553,8 @@ classdef class_process_RFdata
             % **********
             temp_fft2_signal = fft(temp_fft_abs, L/2, 3);
             temp_fft2_signal = abs(temp_fft2_signal(:,:,1:floor(end/2)));
-            [M,I]            = max(temp_fft2_signal, [], 3);
+            [~,I]            = max(temp_fft2_signal, [], 3);
             map_depth        = I;
-            map_amp          = M;
             % imaging
             Y      = (1:m) / obj.fy * 1e3;
             X      = (1:n) / obj.fx * 1e3;
@@ -2365,7 +2799,7 @@ classdef class_process_RFdata
             % bandpassFreq: passband freq. of the filter
             % PropertyName: 'img', 'img_hil' or 'img_hil_filter' ...
             img_temp        = obj.(PropertyName);
-            [lx, ly, lz] = size(img_temp);
+            [~, ~, lz] = size(img_temp);
             L = 2^nextpow2(lz);
             % fft and fft2
             img_temp = fft(img_temp, L, 3); 
@@ -2550,7 +2984,7 @@ classdef class_process_RFdata
             %             [lct, inam_ascan, Ascan_phase] = fx_track_bycluster(Ascan_as, threshold, 23, Idx_resin(2:end-1));
             %             [lct, inam_ascan, Ascan_phase, errors_pos] = fx_track_bydistance(Ascan_as, threshold, Idx_resin);
             % track the -pi/2 by phase
-            [lct, pct, errors_pos, inam_ascan, Ascan_phase] = fx_track_byphase_2pi_increment(Idx_resin, Ascan_as, threshold);
+            [lct, pct, errors_pos1, inam_ascan, Ascan_phase] = fx_track_byphase_2pi_increment(Idx_resin, Ascan_as, threshold);
             %             % debug
             %             figure, plot(Ascan_phase);
             %             hold on;
@@ -2593,7 +3027,7 @@ classdef class_process_RFdata
             set(gca, 'linewidth', 2);
             % for debug
             figure,
-            plot(errors_pos);
+            plot(errors_pos1);
         end
         
         function demo_logGabor_plytrack_inph_v2(obj, x, y, f0, sigma, threshold)
@@ -2639,7 +3073,7 @@ classdef class_process_RFdata
             %             [lct, inam_ascan, Ascan_phase] = fx_track_bycluster(Ascan_as, threshold, 23, Idx_resin(2:end-1));
             %             [lct, inam_ascan, Ascan_phase, errors_pos] = fx_track_bydistance(Ascan_as, threshold, Idx_resin);
             % track the -pi/2 by phase
-            [lct, ~, errors_pos, inam_ascan, Ascan_phase] = fx_track_byphase(Idx_resin, Ascan_as, threshold);
+            [lct, ~, obj.errors_pos, inam_ascan, Ascan_phase] = fx_track_byphase(Idx_resin, Ascan_as, threshold);
             %             % debug
             %             figure, plot(Ascan_phase);
             %             hold on;
@@ -2680,7 +3114,7 @@ classdef class_process_RFdata
             set(gca, 'linewidth', 2);
             % for debug
             figure,
-            plot(errors_pos);
+            plot(obj.errors_pos);
         end
         
         function demo_lowpass_plytrack(obj, x, y, n_interface)
@@ -2926,7 +3360,7 @@ classdef class_process_RFdata
             % ds_rate: the rate been applied for downsampling
             % these should be real unit here: mm, mm, us
             % for example:   xslice =  2; yslice = [2 5]; zslice = [];
-            cp           = medfilt3(obj.c_p, medf_kernel, 'replicate');
+%             cp           = medfilt3(obj.c_p, medf_kernel, 'replicate');
             anglex       = medfilt3(real(obj.angle_x), medf_kernel, 'replicate');
             angley       = medfilt3(real(obj.angle_y), medf_kernel, 'replicate');
             [lx, ly, lz] = size(anglex);
@@ -2980,7 +3414,7 @@ classdef class_process_RFdata
             title('X-Z angle', 'fontsize', 16, 'Fontname', 'times new Roman');
             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
             set(gca,'zDir','reverse'); % get time domain upside down
-            lgd = legend('Interply', 'Front surface', 'Rear surface');
+            legend('Interply', 'Front surface', 'Rear surface');
             % ************** show ply tracks
             cf    = figure;
             ax    = subplot(1, 1, 1);
@@ -3027,7 +3461,7 @@ classdef class_process_RFdata
             title('Y-Z angle', 'fontsize', 16, 'Fontname', 'times new Roman');
             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
             set(gca,'zDir','reverse'); % get time domain upside down
-            lgd = legend('Interply', 'Front surface', 'Rear surface');
+            legend('Interply', 'Front surface', 'Rear surface');
             %             % c_p
             %             cf = figure; h = slice(X, Y, Z, cp, xslice, yslice, zslice);
             %             ax = subplot(1, 1, 1);
@@ -3066,7 +3500,7 @@ classdef class_process_RFdata
             ax    = subplot(1, 1, 1);
             x_idx = xslice * obj.fx / 1e3;
             y_idx = yslice * obj.fy / 1e3;
-            mask  = (obj.col==x_idx) | (obj.row==y_idx);
+%             mask  = (obj.col==x_idx) | (obj.row==y_idx);
             %             x_row = obj.row(mask) / obj.fx * 1e3;
             %             x_col = obj.col(mask) / obj.fy * 1e3;  % / obj.fy * 1e3 ;
             %             x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
@@ -3143,9 +3577,9 @@ classdef class_process_RFdata
                 shading flat;
                 set(gca, 'ydir', 'reverse');
                 hold on;
-                mask  = (obj.row==index) & obj.col>=win(1) & obj.col<=win(end);
-                x_row = obj.col(mask) / obj.fx * 1e3;
-                x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
+%                 mask  = (obj.row==index) & obj.col>=win(1) & obj.col<=win(end);
+%                 x_row = obj.col(mask) / obj.fx * 1e3;
+%                 x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
                 %                 h1 = scatter(ax, x_row, x_dep, ...
                 %                     3,  [122 122 121]/255, 'filled', ...
                 %                     'DisplayName','Interply track');
@@ -3179,9 +3613,9 @@ classdef class_process_RFdata
                 shading flat;
                 set(gca, 'ydir', 'reverse');
                 hold on;
-                mask  = (obj.col==index) & obj.row>=win(1) & obj.row<=win(end);
-                x_row = obj.row(mask) / obj.fy * 1e3;
-                x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
+%                 mask  = (obj.col==index) & obj.row>=win(1) & obj.row<=win(end);
+%                 x_row = obj.row(mask) / obj.fy * 1e3;
+%                 x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
                 %                 h1 = scatter(ax, x_row, x_dep, ...
                 %                     3,  [122 122 121]/255, 'filled', ...
                 %                     'DisplayName','Interply track');
@@ -3955,7 +4389,7 @@ classdef class_process_RFdata
             h3 = plot(ca, t_domain(round([interply_1st interply_last])), ...
                 inph_ascan(round([interply_1st interply_last])), 'yo', 'linewidth', 2);
             hold on;
-            h4 = plot(ca, t_domain(round(I_phase_track(2:end-1))), ...
+            plot(ca, t_domain(round(I_phase_track(2:end-1))), ...
                 angle(Ascan_as(round(I_phase_track(2:end-1)))), 'go', 'linewidth', 2);
             xlabel('\fontname {times new roman} Time (\mus) ', 'fontsize', 16);
             ylabel('\fontname {times new roman} Amp. (arb.)', 'fontsize', 16);
@@ -4024,7 +4458,7 @@ classdef class_process_RFdata
                         thickness(idx, idy, :) = diff(lct);
                         % save to 3d vector
                         if sum(isnan(lct)) > 10
-                            temp = 1;
+                            pause
                         end
                         lct_3d(idx, idy, :)    = round(lct);
                         %                     mask_plytrack_temp(idx, idy, lct(2:end-1)) = 1;
@@ -4130,13 +4564,13 @@ classdef class_process_RFdata
                     % track the -pi/2 by phase
                     % [lct, ~, ~, ~, ~]      = fx_track_byphase(Idx_resin, A_ori, threshold);
                     power_noise            = 1;
-                    [lct, pct, err, ~, ~]  = fx_track_byphase_step(Idx_resin, real(A_ori), obj.fs, threshold, power_noise);
+                    [lct, ~, err, ~, ~]  = fx_track_byphase_step(Idx_resin, real(A_ori), obj.fs, threshold, power_noise);
                     errors_pos_repeat(idx, idy, :) = err;
                     % thickness calculation
                     thickness(idx, idy, :) = diff(lct);
                     % save to 3d vector
                     if sum(isnan(lct)) > 10
-                        temp = 1;
+                        pause;
                     end
                     lct_3d(idx, idy, :)    = round(lct);
                     %                     mask_plytrack_temp(idx, idy, lct(2:end-1)) = 1;
@@ -4358,7 +4792,7 @@ classdef class_process_RFdata
             %             [lct, ~, ~]          = fx_track_bycluster(A_ori, threshold, 23, Idx_resin(2:end-1));
             %             [lct, inam_ascan, Ascan_phase, errors_pos] = fx_track_bydistance(Ascan_as, threshold, Idx_resin);
             % track the -pi/2 by phase
-            [lct, ~, errors_pos, inam_ascan, Ascan_phase] = fx_track_byphase(Idx_resin, Ascan_as, threshold);
+            [lct, ~, ~, inam_ascan, Ascan_phase] = fx_track_byphase(Idx_resin, Ascan_as, threshold);
             % plot the inph, and the ply track of - pi / 2
             cf             = figure('Name', strcat('plytrack_v2_', num2str(x)));
             set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
@@ -4395,7 +4829,7 @@ classdef class_process_RFdata
             set(gca, 'linewidth', 2);
             % for debug
             figure,
-            plot(errors_pos);
+            plot(obj.errors_pos);
         end
         
         function demo_Ascan_plytrack_addnoise(obj, x, y, interp_factor, snr_value)
@@ -4471,7 +4905,7 @@ classdef class_process_RFdata
             set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
             set(gca, 'linewidth', 2);
         end
-        
+
         function demo_removefront_filter_plytrack(obj, x, y, f0, sigma)
             % demonstrate the A scan and the ply track after surface echo
             % removing and logGabor filter
@@ -4664,15 +5098,15 @@ classdef class_process_RFdata
             ax            = subplot(3, 1, 1);
             imagesc(ax, Y, X, inam_profile);
             hold on; axis image;
-            h = colorbar;
+            colorbar;
             ax            = subplot(3, 1, 2);
             imagesc(ax, Y, X, inph_profile);
             hold on; axis image;
-            h = colorbar;
+            colorbar;
             ax            = subplot(3, 1, 3);
             imagesc(ax, Y, X, infq_profile);
             hold on; axis image;
-            h = colorbar;
+            colorbar;
         end
         
         function [obj, inam_profile] = show_oneinterply_2dfft(obj, layer, filtername, v, win_x, win_y, TOF)
@@ -4753,17 +5187,17 @@ classdef class_process_RFdata
             ax            = subplot(1, 3, 1);
             imagesc(ax, Y, X, inam_profile);
             hold on; axis image;
-            h = colorbar;
+            colorbar;
             colormap(jet);
             ax            = subplot(1, 3, 2);
             imagesc(ax, Y, X, log10(abs(fft2D_shifted)));
             hold on; axis image;
-            h = colorbar;
+            colorbar;
             colormap(jet);
             ax            = subplot(1, 3, 3);
             imagesc(ax, Y, X, angle(fft2D_shifted));
             hold on; axis image;
-            h = colorbar;
+            colorbar;
             colormap(jet);
             % asign the image
             obj.C_scan_inam_plywise = inam_profile;
@@ -5049,7 +5483,7 @@ classdef class_process_RFdata
             untrackable    = mean_thickness>total_thick/n*(1+std_mean_threshold(1)) | ...
                 mean_thickness<total_thick/n*(1-std_mean_threshold(1)) | ...
                 std_thickness>total_thick/n*std_mean_threshold(2);
-            h = fx_shaded_errorbars(ca2, untrackable, (1:n), mean_thickness, std_thickness);
+            fx_shaded_errorbars(ca2, untrackable, (1:n), mean_thickness, std_thickness);
             hold on;
             yl = yline(total_thick/n, 'k--', '', 'LineWidth',2);
             yl.LabelHorizontalAlignment = 'right';
@@ -5083,7 +5517,7 @@ classdef class_process_RFdata
             inam = abs(obj.(PropertyName));
             profile_layer = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
             C_scan_inph = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
-            C_scan_inam = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
+            C_scan_inam1 = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
             for i = 1: size(inph_ex, 1)
                 for j = 1:size(inph_ex, 2)
                     inph_ex(i, j, [round(obj.front_I(i, j)) round(obj.rear_I(i, j))]) = 1; % add the front_surface and the rear_surface
@@ -5095,7 +5529,7 @@ classdef class_process_RFdata
                         % use the ratio to calculate the position in the ply
                         z_index = round(k1 + (k2 - k1) * ratio);
                         C_scan_inph(i, j) = inph(i, j, z_index);
-                        C_scan_inam(i, j) = inam(i, j, z_index);
+                        C_scan_inam1(i, j) = inam(i, j, z_index);
                         profile_layer(i, j) = z_index / obj.fs * 1e6;
                     else % set the last inter-ply as NaN otherwise
                         profile_layer(i, j) = NaN;
@@ -5104,9 +5538,9 @@ classdef class_process_RFdata
             end
             figure('Name', ['Cscan_inam_fitplytrack_' , PropertyName, '_', num2str(layer), '_', num2str(ratio)]);
             ax = subplot(1, 1, 1);
-            X = (1: size(C_scan_inam, 1)) / obj.fx * 1e3;
-            Y = (1: size(C_scan_inam, 2)) / obj.fy * 1e3;
-            imagesc(ax, X,Y, C_scan_inam)
+            X = (1: size(C_scan_inam1, 1)) / obj.fx * 1e3;
+            Y = (1: size(C_scan_inam1, 2)) / obj.fy * 1e3;
+            imagesc(ax, X,Y, C_scan_inam1)
             hold on;
             h = colorbar;
             %             caxis([4.5 5.5]); % for comparision, the 'caxis' needs to be modified
@@ -5246,7 +5680,7 @@ classdef class_process_RFdata
             ca2 = subplot(1, 1, 1);
             % plot the thickness by mean and var
             untrackable    = ~find(mean_thickness);
-            h = fx_shaded_errorbars(ca2, untrackable, 1:length(mean_thickness), mean_thickness, std_thickness);
+            fx_shaded_errorbars(ca2, untrackable, 1:length(mean_thickness), mean_thickness, std_thickness);
             hold on;
             grid on;
             % legend
@@ -5281,7 +5715,7 @@ classdef class_process_RFdata
             untrackable    = mean_thickness>total_thick/n*(1+std_mean_threshold(1)) | ...
                 mean_thickness<total_thick/n*(1-std_mean_threshold(1)) | ...
                 std_thickness>total_thick/n*std_mean_threshold(2);
-            h = fx_shaded_errorbars(ca2, untrackable, (1:n), mean_thickness, std_thickness);
+            fx_shaded_errorbars(ca2, untrackable, (1:n), mean_thickness, std_thickness);
             hold on;
             yl = yline(total_thick/n, 'k--', '', 'LineWidth',2);
             yl.LabelHorizontalAlignment = 'right';
@@ -5448,15 +5882,15 @@ classdef class_process_RFdata
                         mask  = (obj.row==index) & obj.col>=win(1) & obj.col<=win(end);
                         x_row = obj.col(mask) / obj.fx * 1e3;
                         x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
-                        h1 = scatter(ca1, x_row, x_dep, ...
+                        scatter(ca1, x_row, x_dep, ...
                             3,  'cyan', 'filled', ...
                             'DisplayName','Interply track');
                         hold on;
-                        h2 = scatter(x, front_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
+                        scatter(x, front_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
                             3, 'red', 'filled', ...
                             'DisplayName','Front surface');
                         hold on;
-                        h3 = scatter(x, bakc_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
+                        scatter(x, bakc_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
                             3, 'magenta', 'filled', ...
                             'DisplayName','Rear surface');
                         hold on;
@@ -5510,6 +5944,10 @@ classdef class_process_RFdata
             % filename: the pathname + filename of the .tdms file
             % x, y: the [x, y] idx to select the reference signal
             obj.reference = class_reference_signal(filename);
+            % downsample   
+            obj.reference.oimg_uint8   = obj.reference.oimg_uint8...
+                (:,:,1:obj.reference.fs/obj.fs:end);
+            obj.reference.fs = obj.fs;
             obj.refer_Ascan_ori = squeeze(obj.reference.oimg_uint8(x, y, :)); % for reference signal , the index is normally (1, 1)
         end
         
@@ -5529,15 +5967,48 @@ classdef class_process_RFdata
             idx2 = round( win(2) * obj.reference.fs);
             obj.refer_Ascan = obj.refer_Ascan_ori(idx1: idx2);
             L = length(obj.refer_Ascan);
+            t = (1:L) / obj.fs * 1e6;
             n = 2^nextpow2(L);
             Y = fft(obj.refer_Ascan, n);
             f = obj.reference.fs .* (0:(n / 2)) / n;
             P = abs(Y / n);
-            figure();
+            % find max and bandwidth
+            [C_maxFreq, I_maxFreq] = max(P); 
+            bw_left   = interp1(P(1:I_maxFreq), f(1:I_maxFreq), C_maxFreq/2);
+            bw_right  = interp1(P(I_maxFreq:n/2+1), f(I_maxFreq:end), C_maxFreq/2);  
+            I_maxFreq = f(I_maxFreq) / 1e6; % from point to frequency
+            %
+            figure;
             subplot(2, 1, 1);
-            plot(obj.refer_Ascan);
+            plot(t, obj.refer_Ascan, 'k-', 'LineWidth', 2);
+            xlabel('\fontname {times new roman} Time (\mus)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Amplitude (arb.)', 'fontsize', 16);
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 2);
+            xlim([0 t(end)]);
             subplot(2, 1, 2);
-            plot(f,P(1:n/2+1));
+            plot(f/1e6,P(1:n/2+1), 'b-', 'LineWidth', 2);
+            xlim([1 10]);
+            xlabel('Frequency (MHz)');
+            ylabel('Magnitude (arb.)');
+            set(gca, 'fontsize', 16);
+            set(gca, 'linewidth', 2);
+            set(gca, 'fontname', 'times new roman');
+            hold on;
+            plot(I_maxFreq, C_maxFreq, 'b.', 'Markersize', 20);
+            plot(bw_left/1e6, C_maxFreq/2, 'b.', 'Markersize', 20);
+            plot(bw_right/1e6, C_maxFreq/2, 'b.', 'Markersize', 20);
+            %             xline(I_maxFreq, '--');
+            %             xline(bw_left/1e6, '--');
+            %             xline(bw_right/1e6, '--');
+            %             yline(C_maxFreq, '--');
+            %             yline(C_maxFreq/2, '--');
+            text(I_maxFreq, 0.8 * C_maxFreq, [num2str(round(I_maxFreq, 2)) 'MHz'], ...
+                'Color', 'b', 'FontSize', 16, 'FontName', 'times new roman');
+            text(bw_left/1e6, 0.8 * C_maxFreq/2, [num2str(round(bw_left/1e6, 2)) 'MHz'], ...
+                'Color', 'b', 'FontSize', 16, 'FontName', 'times new roman');
+            text(bw_right/1e6, 0.8 * C_maxFreq/2, [num2str(round(bw_right/1e6, 2)) 'MHz'], ...
+                'Color', 'b', 'FontSize', 16, 'FontName', 'times new roman');
         end
         
         function obj = align_refer_ascan(obj, x, y)
@@ -5689,9 +6160,9 @@ classdef class_process_RFdata
                     Idx_resin              = linspace(obj.front_I(i, j), ...
                         obj.rear_I(i, j), layers_num);
                     % track the plies by peaks
-                    [~, ~, errors_pos, ~]      = fx_track_byphase(Idx_resin, ori_signal, threshold);
+                    [~, ~, errors_pos1, ~]      = fx_track_byphase(Idx_resin, ori_signal, threshold);
                     %                 lct_repeat(i, :)        = lct;
-                    errors_pos_repeat(i, j, :) = errors_pos;
+                    errors_pos_repeat(i, j, :) = errors_pos1;
                 end
                 disp(i);
             end
@@ -5713,6 +6184,39 @@ classdef class_process_RFdata
         end
         
         % ******************* deconvolution **************
+        function obj = Cepstrum_deconv(obj, x, y)
+            % apply Wiener deconvolution on the A scan
+            % x, y: the x, y index to select the A scan
+            % q_factor: the Q factor for Wiener deconvolution
+            record_signal = squeeze(obj.img(x, y, :));
+            %
+            L = length(record_signal);
+            % forward
+            temp_fft = fft(record_signal, L);
+            % log
+            temp_fft = log(abs(temp_fft)) + 1i*angle(temp_fft);
+            temp_fft2_signal = ifft(temp_fft);
+            % cut-off frequency
+            temp_fft2_signal(1:10) = 0;
+%             temp_fft2_signal = temp_fft2_signal(10:end);
+            % backward
+            temp_fft    = fft(temp_fft2_signal);
+            temp_fft    = abs(exp(temp_fft));
+            deconvolved = ifft(temp_fft);
+            % plot origin
+            t_space = (1:length(record_signal)) / obj.fs * 1e6;
+            cf = figure;
+            ca = subplot(2, 1, 1);
+            plot (ca, t_space, record_signal, 'linewidth', 2);
+            hold on;
+            set(cf, 'Position', [0, 0, 800, 600], 'color', 'white');
+            ca = subplot(2, 1, 2);
+            plot(ca, real(deconvolved), 'linewidth', 2);
+            hold on;
+            ylabel(ca,{['\fontname {times new roman}\fontsize {16}'  'layers'] , '\fontname {times new roman}\fontsize {16} Amp. (arb.)'});
+            xlabel(ca, '\fontname {times new roman} Time (\mus)', 'fontsize', 16);
+        end
+        
         function obj = Wiener_deconv(obj, x, y, q_factor)
             % apply Wiener deconvolution on the A scan
             % x, y: the x, y index to select the A scan
@@ -5808,11 +6312,11 @@ classdef class_process_RFdata
             set(gca, 'fontsize', 16);
             set(gca, 'linewidth', 2);
             caxis('auto');
-            cl = caxis;
+            caxis;
             %             caxis(cl / 10);
         end
         
-        function obj = apply_deconvolutions_Bscan(obj, B_win, B_type, index, q_factor, q_factor_AR, fft_padding, bw, bwr, k, lam, ker_wid, DownRate, Nit)
+        function obj = apply_deconvolutions_Bscan(obj, B_win, B_type, index, q_factor, q_factor_AR, fft_padding, bw, bwr, k, ~, ker_wid, ~, ~)
             % apply the deconvolutions on the original signals
             % Bwin: the indexes of the first and the last points in Bscan image
             % index: the index of the slics in 'B_type' direction, units: mm, mm, us
@@ -5924,7 +6428,7 @@ classdef class_process_RFdata
             obj.img_SparseDeconv_B    = img_SparseDeconv_temp;
         end
         
-        function obj = apply_deconvolutions(obj, q_factor, q_factor_AR, fft_padding, bw, bwr, k, ker_wid)
+        function obj = apply_deconvolutions(obj, q_factor, q_factor_AR, fft_padding, ~, bwr, k, ker_wid)
             % apply the deconvolutions on the original signals
             % q_factor: the Q_factor for wiener deconvolution, 1e-2 for  default;
             % q_factor_AR: the Q_factor for wiener deconvolution combined with AR extrapolation;
@@ -5989,11 +6493,11 @@ classdef class_process_RFdata
             kernel = kernel(I - ker_wid: I + ker_wid);
             % remove the direct component
             kernel = kernel - mean(kernel);
-            L      = length(kernel);
-            n      = 2^nextpow2(L);
-            Y      = fft(kernel, n);
-            f      = obj.fs *(0:(n / 2)) / n;
-            P      = abs(Y(1:n/2+1) / n);
+%             L      = length(kernel);
+%             n      = 2^nextpow2(L);
+%             Y      = fft(kernel, n);
+%             f      = obj.fs *(0:(n / 2)) / n;
+%             P      = abs(Y(1:n/2+1) / n);
             % create matrix
             [lx, ly, lz] = size(obj.img);
             % B scan image
@@ -6014,7 +6518,7 @@ classdef class_process_RFdata
             obj.img_WienerDeconv    = img_WienerDeconv_temp;
         end
         
-        function demo_deconvolutions(obj, x, y, q_factor, q_factor_AR, fft_padding, bw, bwr, k, lam, ker_wid, DownRate, Nit, fig_subname)
+        function demo_deconvolutions(obj, x, y, q_factor, q_factor_AR, fft_padding, ~, bwr, k, ~, ker_wid, ~, ~, fig_subname)
             % demonstrate origin signal and the deconvolved signal
             % q_factor: the Q_factor for wiener deconvolution, 1e-2 for  default;
             % q_factor_AR: the Q_factor for wiener deconvolution combined with AR extrapolation;
@@ -6142,7 +6646,7 @@ classdef class_process_RFdata
             % fig_subname: the subname for the fig
             img_WienerDeconv_temp    = obj.img_WienerDeconv_B(Bwin - min(Bwin) + 1, :);
             img_WienerDeconv_AR_temp = obj.img_WienerDeconv_AR_B(Bwin - min(Bwin) + 1, :);
-            img_SparseDeconv_temp    = obj.img_SparseDeconv_B(Bwin - min(Bwin) + 1, :);
+%             img_SparseDeconv_temp    = obj.img_SparseDeconv_B(Bwin - min(Bwin) + 1, :);
             x                        = (1: size(img_WienerDeconv_temp, 1) ) / obj.fx * 1e3;
             z                        = (1: size(img_WienerDeconv_temp, 2) ) / obj.fs * 1e6;
             cf = figure('Name', ['Bscan_WienerDeconv' '_', B_type, '_', num2str(index), fig_subname]);
@@ -6401,7 +6905,7 @@ classdef class_process_RFdata
             end
             C_scan_inam_temp  = NaN([size(inam, 1), size(inam, 2)]);
             C_scan_index_temp = NaN([size(inam, 1), size(inam, 2)]);
-            for i = 1: size(inam, 1)
+            for i = 2: size(inam, 1)
                 for j = 1:size(inam, 2)
                     % take both front and back surfaces into consideration
                     front_index = obj.front_I(i, j);
@@ -6422,14 +6926,18 @@ classdef class_process_RFdata
                         index                   = (1 - ratio)*front_index + ratio*back_index;
                         C_scan_index_temp(i, j) = index;
                         if index < back_index && ~isnan(index)
-                            C_scan_inam_temp(i, j) = sum(inam(i, j, ...
-                                round(index)-10:round(index)+10));
+                            C_scan_inam_temp(i, j) = mean(inam(i, j, ...
+                                round(index)-10:round(index)+10), 'all');
                         end
                     end
                 end
             end
             % filter the profile and asign the inam
-            C_scan_inam_temp = medfilt2(C_scan_inam_temp);
+            C_scan_inam_temp = C_scan_inam_temp - mean(C_scan_inam_temp, 'all', 'omitnan');
+%                         C_scan_inam_temp = max(C_scan_inam_temp, [], 'all') - C_scan_inam_temp;
+%             C_scan_inam_temp = C_scan_inam_temp - min(C_scan_inam_temp, [], 'all');
+            %             C_scan_inam_temp = medfilt2(C_scan_inam_temp);
+            %             C_scan_inam_temp = histeq(C_scan_inam_temp);
             C_scan_inam_temp = fx_inpaint_nans(C_scan_inam_temp, 5);
             obj.C_scan_inam  = C_scan_inam_temp;
             %             %
@@ -6609,7 +7117,7 @@ classdef class_process_RFdata
             end
             inam            = abs(obj.(PropertyName));
             inph_ex         = obj.mask_plytrack;
-            profile_layer   = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
+%             profile_layer   = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
             C_scan_index    = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
             obj.C_scan_inam = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
             for i = 1: size(inph_ex, 1)
@@ -6652,13 +7160,13 @@ classdef class_process_RFdata
             % Radon transform
             % creat a round mask parameters
             theta                            = 0:5:180;
-            [R, anguler_1D, max_angle_I, xp] = fx_Radonto1Dangular(obj.C_scan_inam, center, radii, theta);
+            [R, anguler_1D, ~, xp] = fx_Radonto1Dangular(obj.C_scan_inam, center, radii, theta);
             % plot the R-theta image
             figure('Name', ['Radon_transform_R_' , PropertyName, '_', num2str(layer), '_', num2str(ratio), '_', num2str(center), '_', num2str(radii)]);
             ax = subplot(1, 1, 1);
             imagesc(ax, theta, xp, R);
             hold on;
-            h = colorbar;
+            colorbar;
             % plot the 1D anguler (sum of gradient by central-different kernel)
             figure('Name', ['Radon_transform_1Danguler_' , PropertyName, '_', num2str(layer), '_', num2str(ratio), '_', num2str(center), '_', num2str(radii)]);
             plot(theta, anguler_1D, 'linewidth', 2);
@@ -6788,7 +7296,7 @@ classdef class_process_RFdata
             ax = subplot(1, 1, 1);
             imagesc(ax, theta, xp, R);
             hold on;
-            h = colorbar;
+            colorbar;
             % plot the 1D anguler (sum of gradient by central-different kernel)
             figure('Name', ['Radon_transform_1Danguler_' , PropertyName, '_', num2str(layer), '_', num2str(ratio), '_', num2str(center), '_', num2str(radii)]);
             plot(theta, anguler_1D, 'linewidth', 2);
@@ -6980,7 +7488,7 @@ classdef class_process_RFdata
             % x, y: index of the point in the image unit : pixel
             % radius, theta: the same ratio for the multi-resolution RT
             % ***
-            r_max = max(radius);
+%             r_max = max(radius);
             ID = squeeze(obj.RT_ID(x, y, :, :));
             %             ID_gyy = squeeze(obj.RT_ID_gyy(x, y, :, :));
             angular_1D = sum(ID, 1);
@@ -7010,7 +7518,7 @@ classdef class_process_RFdata
             set(gca, 'linewidth', 2);
             % demonstrate the ID and 1D angular
             if length(radius) > 1
-                cf = figure();
+                figure();
                 ax = subplot(1, 1, 1);
                 surf(theta, radius, ID);
                 h = colorbar;
@@ -7029,7 +7537,7 @@ classdef class_process_RFdata
                 %                 xlabel('\fontname {times new roman} Angle (degree) ', 'fontsize', 16);
                 %                 ylabel('\fontname {times new roman} Wavelength (pixel)', 'fontsize', 16);
             end
-            cf = figure();
+            figure();
             ax = subplot(1, 1, 1);
             plot(theta, angular_1D);
             set(ax, 'fontsize', 16);
@@ -7113,7 +7621,7 @@ classdef class_process_RFdata
             end
             %
             if size(ID, 2) > 1
-                cf = figure();
+                figure();
                 ax = subplot(1, 1, 1);
                 surf(theta, radius, ID_sum);
                 h = colorbar;
@@ -7143,7 +7651,7 @@ classdef class_process_RFdata
             xlabel('\fontname {times new roman} x (pixel)', 'fontsize', 16);
             ylabel('\fontname {times new roman} y (pixel)', 'fontsize', 16);
             %
-            figure('Name', ['radius_image_RT_']);
+            figure('Name', 'radius_image_RT_');
             ax = subplot(1, 1, 1);
             X = (1: size(image_radius, 2)); % pixels
             Y = (1: size(image_radius, 1)); % default X = (1: size(C_scan_inam_LG, 2))  here
@@ -7175,10 +7683,10 @@ classdef class_process_RFdata
             ax = subplot(1, 1, 1);
             x_idx = xslice * obj.fx / 1e3;
             y_idx = yslice * obj.fy / 1e3;
-            mask  = (obj.col==x_idx) | (obj.row==y_idx);
-            x_row = obj.row(mask) / obj.fx * 1e3;
-            x_col = obj.col(mask) / obj.fy * 1e3;  % / obj.fy * 1e3 ;
-            x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
+%             mask  = (obj.col==x_idx) | (obj.row==y_idx);
+%             x_row = obj.row(mask) / obj.fx * 1e3;
+%             x_col = obj.col(mask) / obj.fy * 1e3;  % / obj.fy * 1e3 ;
+%             x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
             %             scatter3(ax, x_col, x_row, x_dep, ...
             %                 3, [122 122 121]/255, 'filled', ...
             %                 'DisplayName','Interply track');
@@ -7241,7 +7749,7 @@ classdef class_process_RFdata
                 set(gca, 'ZDir', 'reverse');
             end
             %             lgd = legend('Interply', 'Front surface', 'Rear surface');
-            lgd = legend('Front surface', 'Rear surface');
+            legend('Front surface', 'Rear surface');
             xlim([x(1) x(end)]);
             ylim([y(1) y(end)]);
             %             zlim([1 5.5])
@@ -7605,6 +8113,124 @@ classdef class_process_RFdata
             obj.ID_sum_overall               = ID_sum_all;
         end
         
+        % ******************** 2D analytic-signal analysis*******************   
+        function [obj, orien, ampli, apexa]= compute_2D_analytic_signal_image(obj, ~, s_f, s_c, mask_size, imagename)
+            % demonstrate and save the logGabor filtered images
+            % use the C_scan_inam defined before
+            % PropertyName: 'img', 'img_hil' or 'img_hil_filter' ...
+            % ***
+            C_scan_inam_LG = obj.(imagename);
+            NaN_part       = isnan(C_scan_inam_LG);
+            % fill nan
+            if sum(NaN_part, 'all')>0
+                C_scan_inam_LG = fx_inpaint_nans(C_scan_inam_LG, 5);
+            end
+            % pad the C_scan_inam matrix
+            %             wl_max                            = max(wavelength);
+            img_gray = C_scan_inam_LG; % no padding
+            % Apply filters to C-scan image. **replication padding**
+            [X_mesh, Y_mesh] = meshgrid(-mask_size: mask_size, -mask_size: mask_size);
+            kernel_1_f = fx_2DHilbertKernel_1st(X_mesh, Y_mesh, s_f);
+            kernel_1_c = fx_2DHilbertKernel_1st(X_mesh, Y_mesh, s_c);
+            
+            kernel_2_f = fx_2DHilbertKernel_2nd(X_mesh, Y_mesh, s_f);
+            kernel_2_c = fx_2DHilbertKernel_2nd(X_mesh, Y_mesh, s_c);
+            
+%             % DOP
+%             fp_kernel   = kernel_1_f * s_f - kernel_1_c * s_c;
+%             q1_x_kernel = (kernel_1_f - kernel_1_c) .* X_mesh;
+%             q1_y_kernel = (kernel_1_f - kernel_1_c) .* Y_mesh;  
+% 
+%             q2_xx_kernel = (kernel_2_f - kernel_2_c) .* X_mesh.^2;
+%             q2_xy_kernel = (kernel_2_f - kernel_2_c) .* X_mesh.*Y_mesh;
+%             q2_yy_kernel = (kernel_2_f - kernel_2_c) .* Y_mesh.^2;
+            % Possion
+            fp_kernel   = kernel_1_f * s_f;
+            q1_x_kernel = kernel_1_f .* X_mesh;
+            q1_y_kernel = kernel_1_f .* Y_mesh;
+            q2_xx_kernel = kernel_2_f .* X_mesh.^2;
+            q2_xy_kernel = kernel_2_f .* X_mesh.*Y_mesh;
+            q2_yy_kernel = kernel_2_f .* Y_mesh.^2;
+
+            % ************ convolution ***********************
+            [m, n]  = size(fp_kernel);
+            fftSize = size(img_gray) + [m, n] - 1;
+            f_p  = ifftn(fftn(img_gray, fftSize) .* fftn(fp_kernel, fftSize), 'symmetric');
+            f_x  = ifftn(fftn(img_gray, fftSize) .* fftn(q1_x_kernel, fftSize), 'symmetric');
+            f_y  = ifftn(fftn(img_gray, fftSize) .* fftn(q1_y_kernel, fftSize), 'symmetric');
+            f_xx = ifftn(fftn(img_gray, fftSize) .* fftn(q2_xx_kernel, fftSize), 'symmetric');
+            f_xy = ifftn(fftn(img_gray, fftSize) .* fftn(q2_xy_kernel, fftSize), 'symmetric');
+            f_yy = ifftn(fftn(img_gray, fftSize) .* fftn(q2_yy_kernel, fftSize), 'symmetric');
+            %
+            f_pm      = 0.5 * (f_xx - f_yy);
+            f_s       = 0.5 * f_p;
+            cos_alpha = sqrt(f_pm.^2 + f_xy.^2) ./ abs(f_s);
+            q         = (f_x.^2 + f_y.^2) .*2 ./ (1+cos_alpha);
+            %
+            phase = atan2(sqrt(q), f_p);
+            orien = 0.5 * atan2(f_xy, f_pm) + pi/2; % mean orientation
+%             orien    = atan2(f_y, f_x);
+%             mask_ori = phase<=1;
+%             orien(mask_ori) = 0.5 * atan2(f_xy(mask_ori), f_pm(mask_ori)) + pi/2;
+            ampli = 0.5 * sqrt(f_p.^2 + q);
+            apexa = atan2(real(sqrt(f_s.^2 - f_xy.^2 - f_pm.^2)), sqrt(f_xy.^2 + f_pm.^2));
+            % cut to shape
+            f_p   = f_p(m+1:end-m, n+1:end-n);
+            phase = phase(m+1:end-m, n+1:end-n);
+            orien = orien(m+1:end-m, n+1:end-n);
+            ampli = ampli(m+1:end-m, n+1:end-n);
+            apexa = apexa(m+1:end-m, n+1:end-n);             
+            %             se = strel('disk', 1);
+            %             apexa = imopen(apexa, se);
+            %
+            figure,
+            subplot(2,3,1), imagesc(img_gray); colorbar;
+            title('original');
+            subplot(2,3,2), imagesc(f_p); colorbar;
+            title('signal in possion scale space');
+            subplot(2,3,3), imagesc(phase); colorbar;
+            title('phase');
+            orien_image = orien;
+            %             orien_image = modefilt(orien_image, [9 9]);
+            %             orien_image = medfilt2(orien_image, [5 5]);
+            %             A = ones(3)/3^2;
+            %             mesh(A);
+            %             orien_image = conv2(orien_image, A,'same');
+            % mask
+            mask = apexa<=0;
+            orien_image(~mask) = nan;
+            ca = subplot(2,3,4);
+            cb = imagesc(orien_image); colorbar;
+            set(cb,'AlphaData',~isnan(orien_image));
+            colormap(ca, hsv);
+            title('orientation');
+            subplot(2,3,5), imagesc(ampli); colorbar;
+            title('amplitude');
+            subplot(2,3,6), imagesc(apexa); colorbar;
+            title('apex angle');
+            %
+            cf = figure('Name', ['orientation_image_', imagename, '_']);
+            set(cf, 'Position', [0, 0, 600, 600], 'color', 'white');
+            ax = subplot(1, 1, 1);
+            X  = (1+m/2: size(img_gray, 2)-m/2-1) / obj.fx * 1e3; % pixels
+            Y  = (1+n/2: size(img_gray, 1)-n/2-1) / obj.fy * 1e3; % default X = (1: size(C_scan_inam_LG, 2))  here
+            pcolor(ax, X, Y, orien_image);
+            set(gca, 'YDir', 'reverse');
+            shading flat;
+            colormap hsv;
+            caxis([0 pi]);
+            h          = colorbar;
+            h.Location = 'northoutside';
+            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} \theta (rad.)');
+%             set(h,'YTick', [-90 -45 0 45 90]); % set ticks
+            set(ax, 'fontsize', 16);
+            set(ax, 'linewidth', 1.5);
+            xlabel('\fontname {times new roman} X displacement (mm)', 'fontsize', 16);
+            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
+            xlim([min(X(:)) max(X(:))]);
+            ylim([min(Y(:)) max(Y(:))]);
+        end
+
         % ************************** curvelet denoise & curvelt orientaion extraction *****************
         function obj = curvelet_denoise_inamCscan(obj, sigma, imagename)
             % sigma: noise level, also a parameter to define the threshold
@@ -7709,7 +8335,7 @@ classdef class_process_RFdata
                 end
             end
             %
-            figure('Name', ['orientation_image']);
+            figure('Name', 'orientation_image');
             ax = subplot(1, 1, 1);
             X = (1: size(image_orientation, 2)); % pixels
             Y = (1: size(image_orientation, 1)); % default X = (1: size(C_scan_inam_LG, 2))  here
@@ -7721,7 +8347,7 @@ classdef class_process_RFdata
             h = colorbar;
             set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Angle (rad.)');
             %
-            figure('Name', ['wavelength_image']);
+            figure('Name', 'wavelength_image');
             ax = subplot(1, 1, 1);
             X = (1: size(image_scale, 2)); % pixels
             Y = (1: size(image_scale, 1)); % default X = (1: size(C_scan_inam_LG, 2))  here
@@ -7757,7 +8383,7 @@ classdef class_process_RFdata
             inam = abs(obj.(PropertyName));
             inph_ex = obj.mask_plytrack;
             profile_layer = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
-            C_scan_inam = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
+            C_scan_inam1 = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
             for i = 1: size(inph_ex, 1)
                 for j = 1:size(inph_ex, 2)
                     inph_ex(i, j, [round(obj.front_I(i, j)) round(obj.rear_I(i, j))]) = 1; % add the front_surface and the rear_surface
@@ -7768,7 +8394,7 @@ classdef class_process_RFdata
                         k2 = k(layer + 1);
                         % use the ratio to calculate the position in the ply
                         z_index = round(k1 + (k2 - k1) * ratio);
-                        C_scan_inam(i, j) = inam(i, j, z_index);
+                        C_scan_inam1(i, j) = inam(i, j, z_index);
                         profile_layer(i, j) = z_index / obj.fs * 1e6;
                     else % set the last inter-ply as NaN otherwise
                         profile_layer(i, j) = NaN;
@@ -7776,7 +8402,7 @@ classdef class_process_RFdata
                 end
             end
             % creat a round mask
-            mask = fx_createCirclesMask(C_scan_inam, center, radii);
+            mask = fx_createCirclesMask(C_scan_inam1, center, radii);
             % fillna
             % C_scan_inam =  fx_inpaint_nans(C_scan_inam, 5);
             x1 = center(2) - radii;
@@ -7784,7 +8410,7 @@ classdef class_process_RFdata
             y1 = center(1) - radii;
             y2 = center(1) + radii;
             % use the mask to select a round region
-            C_scan_inam_mask = C_scan_inam .* mask;
+            C_scan_inam_mask = C_scan_inam1 .* mask;
             C_scan_inam_mask = C_scan_inam_mask(x1: x2,y1: y2);
             tic;
             % now make 2D fft of original image
@@ -7838,7 +8464,7 @@ classdef class_process_RFdata
             inam = abs(obj.(PropertyName));
             inph_ex = obj.mask_plytrack;
             profile_layer = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
-            C_scan_inam = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
+            C_scan_inam1 = NaN([size(inph_ex, 1), size(inph_ex, 2)]);
             for i = 1: size(inph_ex, 1)
                 for j = 1:size(inph_ex, 2)
                     inph_ex(i, j, [round(obj.front_I(i, j)) round(obj.rear_I(i, j))]) = 1; % add the front_surface and the rear_surface
@@ -7849,7 +8475,7 @@ classdef class_process_RFdata
                         k2 = k(layer + 1);
                         % use the ratio to calculate the position in the ply
                         z_index = round(k1 + (k2 - k1) * ratio);
-                        C_scan_inam(i, j) = inam(i, j, z_index);
+                        C_scan_inam1(i, j) = inam(i, j, z_index);
                         profile_layer(i, j) = z_index / obj.fs * 1e6;
                     else % set the last inter-ply as NaN otherwise
                         profile_layer(i, j) = NaN;
@@ -7858,28 +8484,28 @@ classdef class_process_RFdata
             end
             % Radon transform
             % creat a round mask parameters
-            [R, anguler_1D, max_angle_I, xp, theta] = fx_Radonto1Dangular(C_scan_inam, center, radii);
+            [R, anguler_1D, ~, xp, theta] = fx_Radonto1Dangular(C_scan_inam1, center, radii);
             % plot the R-theta image
             figure('Name', ['Radon_transform_R_' , PropertyName, '_', num2str(layer), '_', num2str(ratio), '_', num2str(center), '_', num2str(radii)]);
             ax = subplot(1, 1, 1);
             imagesc(ax, theta, xp, R);
             hold on;
-            h = colorbar;
+            colorbar;
             % plot the 1D anguler (sum of gradient by central-different kernel)
             figure('Name', ['Radon_transform_1Danguler_' , PropertyName, '_', num2str(layer), '_', num2str(ratio), '_', num2str(center), '_', num2str(radii)]);
             plot(theta, anguler_1D, 'linewidth', 2);
             % find the parallel C-scan of the layer
             z_index = round(mean(profile_layer * obj.fs / 1e6, 'all', 'omitnan'));
             C_scan_inam_2 = inam(:, :, z_index);
-            C_scan_inam_2(isnan(C_scan_inam)) = NaN;
+            C_scan_inam_2(isnan(C_scan_inam1)) = NaN;
             % creat a round mask parameters
-            [R, anguler_1D, max_angle_I, xp, theta] = fx_Radonto1Dangular(C_scan_inam_2, center, radii);
+            [R, anguler_1D, ~, xp, theta] = fx_Radonto1Dangular(C_scan_inam_2, center, radii);
             % plot the R-theta image
             figure('Name', ['Radon_transform_R_withoutplytrack_' , PropertyName, '_', num2str(layer), '_', num2str(ratio), '_', num2str(center), '_', num2str(radii)]);
             ax = subplot(1, 1, 1);
             imagesc(ax, theta, xp, R);
             hold on;
-            h = colorbar;
+            colorbar;
             % plot the 1D anguler (sum of gradient by central-different kernel)
             figure('Name', ['Radon_transform_1Danguler_withoutplytrack_' , PropertyName, '_', num2str(layer), '_', num2str(ratio), '_', num2str(center), '_', num2str(radii)]);
             plot(theta, anguler_1D, 'linewidth', 2);
@@ -7955,66 +8581,6 @@ classdef class_process_RFdata
             title('Local Orientation Over Scales (radians)');
         end
         
-        function RT_monogenic_signal_oneCscan_fitplytrack(obj, PropertyName, cw,  center, radii)
-            % demonstrate the monogenic signal of one inter-ply
-            % use the C_scan_inam defined before
-            % PropertyName: 'img', 'img_hil' or 'img_hil_filter' ...
-            % cw:  Centre-wavelengths in pixel units
-            C_scan_inam_mono = obj.C_scan_inam;
-            mask_NaN = isnan(C_scan_inam_mono);
-            % creat a round mask
-            mask = fx_createCirclesMask(C_scan_inam_mono, center, radii);
-            %  C_scan_inam =  fx_inpaint_nans(C_scan_inam, 5);
-            x1 = center(2) - radii;
-            x2 = center(2) + radii;
-            y1 = center(1) - radii;
-            y2 = center(1) + radii;
-            C_scan_inam_mono(mask_NaN) = mean(C_scan_inam_mono, 'all', 'omitnan');
-            [Y, X] = size(C_scan_inam_mono);
-            %
-            filtStruct = createMonogenicFilters(Y, X, cw, 'lg', 0.55);
-            % Now we can use this structure to find the monogenic signal for the image
-            [m1, m2, m3] = monogenicSignal(C_scan_inam_mono, filtStruct);
-            %
-            % Local energy (calculated on a per-scale basis)
-            LE = localEnergy(m1, m2, m3);
-            % Local phase (calculated on a per-scale basis)
-            LP = localPhase(m1, m2, m3);
-            % Local orientation (calculated on a per-scale basis)
-            % Only need to pass the odd parts (m2,m3) as even part (m1) is irrelevant
-            LO = localOrientation(m2, m3);
-            % Radon transform
-            % creat a round mask parameters
-            LO(mask_NaN) = 0;
-            LP(mask_NaN) = 0;
-            [R, anguler_1D, max_angle_I, xp, theta] = fx_Radonto1Dangular(LO, center, radii);
-            % plot the R-theta image
-            figure('Name', ['Radon_transform_R_' , PropertyName, '_', num2str(center), '_', num2str(radii)]);
-            ax = subplot(1, 1, 1);
-            imagesc(ax, theta, xp, R);
-            hold on;
-            h = colorbar;
-            % plot the 1D anguler (sum of gradient by central-different kernel)
-            figure('Name', ['Radon_transform_1Danguler_' , PropertyName, '_', num2str(center), '_', num2str(radii)]);
-            plot(theta, anguler_1D, 'linewidth', 2);
-            figure('Name', ['LO_RT_fitplytrack_' , PropertyName, '_']);
-            ax = subplot(1, 1, 1);
-            X = (1: size(LO, 1)) / obj.fx * 1e3;
-            Y = (1: size(LO, 2)) / obj.fy * 1e3;
-            imagesc(ax, X, Y, LO);
-            hold on;
-            h = colorbar;
-            %             caxis([4.5 5.5]); % for comparision, the 'caxis' needs to be modified
-            set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Time(\mus)');
-            set(ax, 'fontsize', 16);
-            set(ax, 'linewidth', 1.5);
-            xlabel('\fontname {times new roman} X displacement (mm) ', 'fontsize', 16);
-            ylabel('\fontname {times new roman} Y displacement (mm)', 'fontsize', 16);
-            %             zlabel('\fontname {times new roman} Time(\mus)', 'fontsize', 16);
-            set(gca, 'Fontname', 'times new Roman', 'Fontsize', 16);
-            set(gca, 'linewidth', 2);
-        end
-        
         function show_one_Radontransform_filter(obj, PropertyName, center, radii, R_lo_H, R_Lo)
             % demonstrate the RT of one inter-ply combined with filter
             % use the C_scan_inam defined before
@@ -8046,13 +8612,13 @@ classdef class_process_RFdata
             C_scan_inam_2DFFT = abs(ifft2(fft2D_ishift));
             % Radon transform
             % creat a round mask parameters
-            [R, anguler_1D, max_angle_I, xp, theta] = fx_Radonto1Dangular(C_scan_inam_2DFFT, center, radii);
+            [R, anguler_1D, ~, xp, theta] = fx_Radonto1Dangular(C_scan_inam_2DFFT, center, radii);
             % plot the R-theta image
             figure('Name', ['Radon_transform_R_' , PropertyName, '_', num2str(center), '_', num2str(radii)]);
             ax = subplot(1, 1, 1);
             imagesc(ax, theta, xp, R);
             hold on;
-            h = colorbar;
+            colorbar;
             % plot the 1D anguler (sum of gradient by central-different kernel)
             figure('Name', ['Radon_transform_1Danguler_' , PropertyName, '_', num2str(center), '_', num2str(radii)]);
             plot(theta, anguler_1D, 'linewidth', 2);
@@ -8123,23 +8689,23 @@ classdef class_process_RFdata
             end
             obj.frow = length(wavelength);
             obj.fcol = length(orientation);
-            cf = figure;
+            figure;
             for p = 1: obj.frow * obj.fcol
                 subplot(obj.fcol, obj.frow, p);
                 imshow(obj.gaborMag(:, :, p), []);
                 theta = gaborArray(p).Orientation;
                 lambda = gaborArray(p).Wavelength;
                 title(sprintf('Orientation=%d, Wavelength=%d', theta, lambda));
-                h = colorbar;
+                colorbar;
             end
-            cf = figure;
+            figure;
             for p = 1: obj.frow * obj.fcol
                 subplot(obj.fcol, obj.frow, p);
                 imshow(obj.gaborPha(:, :, p), []);
                 theta = gaborArray(p).Orientation;
                 lambda = gaborArray(p).Wavelength;
                 title(sprintf('Orientation=%d, Wavelength=%d', theta, lambda));
-                h = colorbar;
+                colorbar;
             end
         end
         
@@ -8192,19 +8758,28 @@ classdef class_process_RFdata
             set(gca, 'linewidth', 2);
             % Apply filters to C-scan image. **replication padding**
             fprintf('Gabor filteration: start');
-            [obj.gaborMag, obj.gaborPha] = imgaborfilt(C_scan_inam_RT_pad, gaborArray);
+            [gaborMag_i, ~] = imgaborfilt(C_scan_inam_RT_pad, gaborArray);
+            fprintf('Gabor filteration: finish');
             % normalized the magnitude.
-            for i = 1:length(gaborArray)
-                BW                    = gaborArray(i).SpatialFrequencyBandwidth;
-                sigmaX                = gaborArray(i).Wavelength / pi * sqrt(log(2) / 2) * (2^BW + 1)/(2^BW - 1);
-                sigmaY                = sigmaX ./ gaborArray(i).SpatialAspectRatio;
-                gaborMag_i            = squeeze(obj.gaborMag(:, :, i));
-                gaborMag_i            = gaborMag_i  / (2 * sigmaX * sigmaY * pi);
-                gaborMag_i(NaN_part)  = NaN;
-                obj.gaborMag(:, :, i) = gaborMag_i;
-                clc;
-                fprintf('Gabor filteration: %0.2f%%\n',100*i/length(gaborArray));
-            end
+            wl_Array    = repmat(wavelength', length(gaborArray)/length(wavelength), 1);
+            BW          = SFB;
+            sigmaX      = wl_Array / pi * sqrt(log(2) / 2) * (2^BW + 1)/(2^BW - 1);
+            sigmaY      = sigmaX ./ SAR;
+            denominator = permute(2 * sigmaX .* sigmaY * pi, [2, 3, 1]);
+            gaborMag_i  = bsxfun(@rdivide, gaborMag_i, denominator);
+            gaborMag_i(repmat(NaN_part, 1, 1, 900)) = NaN;
+%             for i = 1:length(gaborArray)
+%                 BW                    = SFB;
+%                 sigmaX                = gaborArray(i).Wavelength / pi * sqrt(log(2) / 2) * (2^BW + 1)/(2^BW - 1);
+%                 sigmaY                = sigmaX ./ SAR;
+%                 gaborMag_i            = squeeze(obj.gaborMag(:, :, i));
+%                 gaborMag_i            = gaborMag_i  / (2 * sigmaX * sigmaY * pi);
+%                 gaborMag_i(NaN_part)  = NaN;
+%                 obj.gaborMag(:, :, i) = gaborMag_i;
+%                 clc;
+%                 fprintf('Gabor filteration: %0.2f%%\n',100*i/length(gaborArray));
+%             end
+            obj.gaborMag = gaborMag_i;
             obj.frow = length(wavelength);
             obj.fcol = length(orientation);
         end
@@ -8228,7 +8803,7 @@ classdef class_process_RFdata
             C_scan_inam_LG = obj.C_scan_inam;
             C_scan_inam_LG(isnan(C_scan_inam_LG)) = mean(C_scan_inam_LG, 'all', 'omitnan');
             %
-            figure('Name', ['Cscan_fitplytrack_forlogGabor' ]);
+            figure('Name', 'Cscan_fitplytrack_forlogGabor' );
             ax = subplot(1, 1, 1);
             X = (1: size(C_scan_inam_LG, 2)) / obj.fx * 1e3; % default X = (1: size(C_scan_inam_LG, 2))  here
             Y = (1: size(C_scan_inam_LG, 1)) / obj.fy * 1e3;
@@ -8248,7 +8823,7 @@ classdef class_process_RFdata
             set(gca, 'linewidth', 2);
             % demonstrate the ID and 1D angular
             if length(wavelength) > 1
-                cf = figure();
+                figure();
                 ax = subplot(1, 1, 1);
                 imagesc(orientation, wavelength, ID);
                 h = colorbar;
@@ -8325,12 +8900,39 @@ classdef class_process_RFdata
             image_wavelength  = NaN(lx, ly);
             ID_sum            = zeros(length(wavelength), length(orientation));
             gabormag          = obj.gaborMag;
-            g                 = gabor(wavelength,orientation);
+            gaborArray        = gabor(wavelength,orientation);
             % Gaussian filter for the GaborMag
-            for i = 1:length(g)
-                sigma                    = 0.5*g(i).Wavelength;
-                gabormag_i               = gabormag(:, :, i);
-                invalid_part             = isnan(gabormag_i);
+            % ************** modification to accelerate. not working yet *************
+            %             sigma = 0.5 * repmat(wavelength', length(gaborArray)/length(wavelength), 1);
+            %             sigma = 0.5 * wavelength;
+            %             x = -lx/2+1:lx/2;
+            %             y = -ly/2+1:ly/2;
+            %             [Y,X] = meshgrid(x,y);
+            %             Y = repmat(Y, [1 1 length(sigma)]);
+            %             X = repmat(X, [1 1 length(sigma)]);
+            %             sigma = repmat(sigma', 1, lx, ly);
+            %             sigma = permute(sigma,[2 3 1]); % permute to the correct order
+            %             f = exp( -(X.^2+Y.^2)./(2*sigma.^2) );
+            %             f = bsxfun(@rdivide, f, sum(f, [1 2]));
+            %             clear x y Y X sigma;
+            % %             Gau_Kernel2d     = fspecial('gaussian', [kernel_size kernel_size], K*sigma);
+            % %             Gau_Kernel2d     = padarray(Gau_Kernel2d, ([lx ly]-kernel_size)/2, 0, 'both');
+            % %             Gau_Kernel2d_fft = fft2(Gau_Kernel2d, lx, ly);
+            % %             Gau_Kernel2d_fft = fftshift(Gau_Kernel2d_fft);
+            % %             Gau_Kernel2d     = ifft2(ifftshift(Gau_Kernel2d_fft), "symmetric");
+            %             figure, imagesc(gabormag(:,:,10));
+            %             tic;
+            %             gabormag_fftx    = fft(gabormag, [], 1);
+            %             gabormag_fftxy   = fft(gabormag_fftx, [], 2);
+            %             f_fftx           = fft(f, [], 1);
+            %             f_fftxy          = fft(f_fftx, [], 2);
+            %             f_fftxy          = repmat(f_fftxy, 1, 1, length(gaborArray)/length(wavelength));
+            %             gabormag_fitler  = ifft(ifft(gabormag_fftxy.*f_fftxy, [], 1), [], 2);
+            % ********************************
+            for i = 1:length(gaborArray)
+                sigma        = 0.5*gaborArray(i).Wavelength;
+                gabormag_i   = gabormag(:, :, i);
+                invalid_part = isnan(gabormag_i);
                 if K~=0
                     gabormag_i(invalid_part) = mean(gabormag_i, 'all', 'omitnan');
                     gabormag_i               = imgaussfilt(gabormag_i, K*sigma);
@@ -8338,6 +8940,8 @@ classdef class_process_RFdata
                 end
                 gabormag(:,:,i)          = gabormag_i;
             end
+%             toc;
+%             figure, imagesc(gabormag(:,:,10));
             % check the nan and adjust the ID
             NaN_part       = isnan(gabormag);
             NaN_part       = sum(NaN_part, 3);
@@ -8349,64 +8953,73 @@ classdef class_process_RFdata
                 distances_i_pow2 = (r_nan(i)-X).^2 + (l_nan(i)-Y).^2;
                 distances_pow2   = min(distances_pow2, distances_i_pow2);
             end
-            kurtosis_map = nan(lx, ly);
-            for i = round(wl_min)+1: lx - round(wl_min)-1
-                for j = round(wl_min)+1: ly - round(wl_min)-1
-                    ID                      = squeeze(gabormag(i, j, :));
-                    if isnan(ID) % invalid part has been assigned NaN
-                        image_orientation(i, j) = NaN;
-                        image_wavelength(i, j)  = NaN;
-                        continue;
-                    end
-                    ID = reshape(ID, [obj.frow, obj.fcol]);
-                    % check the nan and adjust the ID
-                    %                     distances = sqrt((r_nan-i).^2 + (l_nan-j).^2);
-                    %                     ID_bound  = fx_binarySearch(...
-                    %                         wavelength, length(wavelength), min(distances));
-                    %                     if ID_bound==1 || wavelength(ID_bound-1) <= 4
-                    %                         continue;
-                    %                     else
-                    %                         ID = ID(1:ID_bound-1, :);
-                    %                     end
-                    % %wavelength is 2:1:max!!
-                    % *********** comment out below for better performance on the ****edge !
-                    %                     ID_bound = round(sqrt(distances_pow2(i, j)));
-                    %                     if ID_bound <= 4
-                    %                         continue;
-                    %                     elseif ID_bound < wl_max*2 || ... % consider the edge of the whole image
-                    %                             i < wl_max*2 || j < wl_max*2 || lx-i < wl_max*2 || ly-j < wl_max*2
-                    %                         % consider the edge of the whole image
-                    %                         ID_bound     = min([ID_bound, i, j, lx-i , ly-j ]);
-                    %                         ID_bound_ind = fx_binarySearch(wavelength, length(wavelength), ID_bound)-1;
-                    %                         ID           = ID(1:ID_bound_ind, :);
-                    %                     end
-                    %                     ID_shift = circshift(ID, round(size(ID, 2) / 2), 2);
-                    % ****************** %
-                    %                     ID_sub = ID - ID_shift;
-                    [C, I]          = max(ID(:));       
-                    [indwl, indAng] = ind2sub(size(ID),I);
-                    k               = kurtosis(ID(indwl, :));
-                    if k < 2
-                        continue;
-                    end
-%                     if C < mean(ID(indwl,:)) + 2.5*std(ID(indwl,:))
-%                         continue;
-%                     end
-                    %                     if C < mean(ID, [1,2]) + 2*std(ID, [], 'all')
-                    %                         continue;
-                    %                     end
-                    image_orientation(i, j) = mod(orientation(indAng)+angle_compens, 180) - 90;
-                    image_wavelength(i, j)  = wavelength(indwl);
-                    kurtosis_map(i,j) = (C - mean(ID(indwl,:))) / std(ID(indwl,:));
-%                     kurtosis_map(i,j) = k;
-                    % sum up ID
-                    if size(ID)==size(ID_sum)
-                        ID_sum = ID_sum + ID;
-                    end
-                end
-                clc;
-                fprintf('ID imaging: %0.2f%%\n', 100*i /(lx - 2*round(wl_min)));
-            end
+%             kurtosis_map = nan(lx, ly);
+            tic;
+            % *********** to accelerate, premise: average distributed orientation
+            [~, Idx_1d] = max(gabormag, [], 3); 
+            indAng = floor(Idx_1d/length(wavelength));
+            indwl  = mod(Idx_1d, length(wavelength));
+            Ang    = orientation(1) + indAng *(orientation(2) - orientation(1));
+            image_wavelength  = wavelength(1) + (indwl-1) *(wavelength(2) - wavelength(1));
+            image_orientation = mod(Ang+angle_compens, 180) - 90;
+            % ******************
+            %             for i = round(wl_min)+1: lx - round(wl_min)-1
+            %                 for j = round(wl_min)+1: ly - round(wl_min)-1
+            %                     ID                      = squeeze(gabormag(i, j, :));
+            %                     if isnan(ID) % invalid part has been assigned NaN
+            %                         image_orientation(i, j) = NaN;
+            %                         image_wavelength(i, j)  = NaN;
+            %                         continue;
+            %                     end
+            %                     ID = reshape(ID, [obj.frow, obj.fcol]);
+            %                     % check the nan and adjust the ID
+            %                     %                     distances = sqrt((r_nan-i).^2 + (l_nan-j).^2);
+            %                     %                     ID_bound  = fx_binarySearch(...
+            %                     %                         wavelength, length(wavelength), min(distances));
+            %                     %                     if ID_bound==1 || wavelength(ID_bound-1) <= 4
+            %                     %                         continue;
+            %                     %                     else
+            %                     %                         ID = ID(1:ID_bound-1, :);
+            %                     %                     end
+            %                     % %wavelength is 2:1:max!!
+            %                     % *********** comment out below for better performance on the ****edge !
+            %                     %                     ID_bound = round(sqrt(distances_pow2(i, j)));
+            %                     %                     if ID_bound <= 4
+            %                     %                         continue;
+            %                     %                     elseif ID_bound < wl_max*2 || ... % consider the edge of the whole image
+            %                     %                             i < wl_max*2 || j < wl_max*2 || lx-i < wl_max*2 || ly-j < wl_max*2
+            %                     %                         % consider the edge of the whole image
+            %                     %                         ID_bound     = min([ID_bound, i, j, lx-i , ly-j ]);
+            %                     %                         ID_bound_ind = fx_binarySearch(wavelength, length(wavelength), ID_bound)-1;
+            %                     %                         ID           = ID(1:ID_bound_ind, :);
+            %                     %                     end
+            %                     %                     ID_shift = circshift(ID, round(size(ID, 2) / 2), 2);
+            %                     % ****************** %
+            %                     %                     ID_sub = ID - ID_shift;
+            %                     [C, I]          = max(ID(:));
+            %                     [indwl, indAng] = ind2sub(size(ID),I);
+            %                     k               = kurtosis(ID(indwl, :));
+            %                     if k < 2
+            %                         continue;
+            %                     end
+            %                     %                     if C < mean(ID(indwl,:)) + 2.5*std(ID(indwl,:))
+            %                     %                         continue;
+            %                     %                     end
+            %                     %                     if C < mean(ID, [1,2]) + 2*std(ID, [], 'all')
+            %                     %                         continue;
+            %                     %                     end
+            %                     image_orientation(i, j) = mod(orientation(indAng)+angle_compens, 180) - 90;
+            %                     image_wavelength(i, j)  = wavelength(indwl);
+            %                     %                     kurtosis_map(i,j) = (C - mean(ID(indwl,:))) / std(ID(indwl,:));
+            %                     %                     kurtosis_map(i,j) = k;
+            %                     % sum up ID
+            %                     if size(ID)==size(ID_sum)
+            %                         ID_sum = ID_sum + ID;
+            %                     end
+            %                 end
+            %                 clc;
+            %                 fprintf('ID imaging: %0.2f%%\n', 100*i /(lx - 2*round(wl_min)));
+            %             end
             %             if ~isempty(obj.rear_mask)
             %                 image_orientation(~obj.rear_mask) = NaN;
             %             end
@@ -8424,7 +9037,7 @@ classdef class_process_RFdata
             %             disp([num2str(mean(image_orientation, 'all', 'omitnan')) ...
             %                 ' + ' num2str(std(image_orientation, 0, 'all', 'omitnan'))]);
             %************************* Gaussian fitting ********************
-            Idof_edge = -90:90;
+            Idof_edge = linspace(-90, 90, length(orientation));
             Idof_N    = histcounts(image_orientation, Idof_edge);
             %             centers      = [0 45 90 135];
             %             sigmas       = [8 8 8 8];
@@ -8443,18 +9056,20 @@ classdef class_process_RFdata
             %             disp(['mean:' num2str(m_fiber_angle) '. std:' num2str(std_fiber_angle)]);
             % ********** plot 1D distribution
             % normalize
-            Idof_N = Idof_N / sum(Idof_N);
+            Idof_N    = Idof_N / sum(Idof_N);
+            Idof_N    = circshift(Idof_N', -22, 1);
+            Idof_edge = Idof_edge + 22 * (orientation(2)-orientation(1));
             % log
             figure('Name', ['angle_distribution_ID' '_' imagename]);
             set(gcf, 'Position', [0, 0, 400, 250], 'color', 'white');
-            h1 = bar(-89:90, Idof_N);
+            bar(Idof_edge(2:end), Idof_N);
             xlabel('\fontname {times new roman} Angle (\circ)', 'fontsize', 16);
             ylabel('\fontname {times new roman} Normalized value', 'fontsize', 16);
             %         ylabel('\fontname {times new roman} Percentage', 'fontsize', 16);
             set(gca, 'Fontname', 'times new Roman', 'FontSize', 16);
             set(gca, 'linewidth', 2);
             % %
-            cf = figure('Name', ['orientation_image_', num2str(K), imagename, '_', num2str(angle_compens)]);
+            cf = figure('Name', ['orientation_image_', imagename, '_', num2str(angle_compens)]);
             set(cf, 'Position', [0, 0, 600, 600], 'color', 'white');
             ax = subplot(1, 1, 1);
             X  = (1: size(image_orientation, 2)) / obj.fx * 1e3; % pixels
@@ -8475,7 +9090,7 @@ classdef class_process_RFdata
             xlim([min(X(:)) max(X(:))]);
             ylim([min(Y(:)) max(Y(:))]);
             %
-            cf = figure('Name', ['wavelength_image', num2str(K), imagename, '_', num2str(angle_compens)]);
+            cf = figure('Name', ['wavelength_image', imagename, '_', num2str(angle_compens)]);
             set(cf, 'Position', [0, 0, 600, 600], 'color', 'white');
             ax = subplot(1, 1, 1);
             X  = (1: size(image_wavelength, 2)) / obj.fx * 1e3; % pixels
@@ -8677,15 +9292,17 @@ classdef class_process_RFdata
             obj.theta_LG              = orientation;
             obj.PropertyName_LG       = PropertyName;
             % start
+            SFB = 1;
+            SAR = 0.5;
             gaborArray                = gabor(wavelength, orientation, ...
-                'SpatialFrequencyBandwidth', 1.5, 'SpatialAspectRatio', 0.2);
+                'SpatialFrequencyBandwidth', SFB, 'SpatialAspectRatio', SAR);
             row_ga                    = length(wavelength);
             col_ga                    = length(orientation);
             wl_max                    = round(max(wavelength)/2);
             index_container           = NaN(size(obj.front_I));
             Inplane_direction         = NaN(size(obj.(PropertyName)));
-            Inplane_direction_overall = NaN(size(obj.(PropertyName)));
-            ID_sum_all = NaN(length(ratios), length(wavelength), length(orientation));
+%             Inplane_direction_overall = NaN(size(obj.(PropertyName)));
+%             ID_sum_all = NaN(length(ratios), length(wavelength), length(orientation));
             %
             disp('gaborMagnitude calculation...');
             for i = 1:length(ratios)
@@ -8697,77 +9314,97 @@ classdef class_process_RFdata
                 [~, C_scan_inam_para, index_container] = obj.define_parallel_inamCscan(ratio, PropertyName);
                 [~, ~, index_container_next]           = obj.define_parallel_inamCscan(ratio_next, PropertyName);
                 if sigma_denoise==0
-                    C_scan_inam_para_denoise = C_scan_inam_para;
+                    C_scan_inam_para_denoise = single(C_scan_inam_para);
                 else
                     C_scan_inam_para_denoise = fx_curvelet_denoise_enhanced(sigma_denoise, C_scan_inam_para);
                 end
                 [gaborMagnitude, ~] = imgaborfilt(C_scan_inam_para_denoise, gaborArray);
+                gaborMagnitude      = single(gaborMagnitude);
                 % normalized the magnitude.
-                for k = 1:length(gaborArray)
-                    BW         = gaborArray(k).SpatialFrequencyBandwidth;
-                    sigmaX     = gaborArray(k).Wavelength / pi * sqrt(log(2)/2) * (2^BW+1) / (2^BW-1);
-                    sigmaY     = sigmaX ./ gaborArray(k).SpatialAspectRatio;
-                    % normalized the magnitude.
-                    gabormag_k = gaborMagnitude(:, :, k);
-                    gabormag_k = gabormag_k / (2 * sigmaX * sigmaY * pi);
-                    % Gaussian filter for the GaborMag
-                    if K==0 % choose to applie the filter
-                        gaborMagnitude(:, :, k)  = gabormag_k;
-                    else
-                        sigma                    = 0.5*gaborArray(k).Wavelength;
-                        invalid_part             = isnan(gabormag_k);
-                        gabormag_k(invalid_part) = mean(gabormag_k, 'all', 'omitnan');
-                        gabormag_k               = imgaussfilt(gabormag_k, K*sigma);
-                        gabormag_k(invalid_part) = NaN;
-                        gaborMagnitude(:, :, k)  = gabormag_k;
+                wl_Array        = repmat(wavelength', length(gaborArray)/length(wavelength), 1);
+                BW              = SFB;
+                sigmaX          = wl_Array / pi * sqrt(log(2) / 2) * (2^BW + 1)/(2^BW - 1);
+                sigmaY          = sigmaX ./ SAR;
+                denominator     = permute(2 * sigmaX .* sigmaY * pi, [2, 3, 1]);
+                gaborMagnitude  = bsxfun(@rdivide, gaborMagnitude, denominator);
+                % ********************************
+                for ii = 1:length(gaborArray)
+                    sigma        = 0.5*gaborArray(ii).Wavelength;
+                    gabormag_i   = gaborMagnitude(:, :, ii);
+                    invalid_part = isnan(gabormag_i);
+                    if K~=0
+                        gabormag_i(invalid_part) = mean(gabormag_i, 'all', 'omitnan');
+                        gabormag_i               = imgaussfilt(gabormag_i, K*sigma);
+                        gabormag_i(invalid_part) = NaN;
                     end
+                    gaborMagnitude(:,:,ii)          = gabormag_i;
                 end
-                % search for the max
-                ID_sum   = zeros(length(wavelength), length(orientation));
-                [lx, ly] = size(gaborMagnitude(:, :, 1));
-                for ii = wl_max + 1: lx - wl_max
-                    for jj = wl_max + 1: ly - wl_max
-                        ID     = squeeze(gaborMagnitude(ii, jj, :));
-                        ID     = reshape(ID, [row_ga, col_ga]);
-                        [C, I] = max(ID(:));
-                        if C <= mean(ID,'all') + 0*std(ID, 0, 'all') % no significate maximum, thus skip
-                            continue;
-                        end
-                        [~, indAng] = ind2sub(size(ID), I);
-                        if i==1
-                            upper_index_bound = index_container(ii, jj);
-                            lower_index_bound = round(index_container(ii, jj)/2 ...
-                                +index_container_next(ii, jj)/2);
-                        elseif i==length(ratios)
-                            upper_index_bound = round(index_container(ii, jj)/2 ...
-                                + index_container_prev(ii, jj)/2);
-                            lower_index_bound = index_container(ii, jj);
-                        else
-                            upper_index_bound = round(index_container(ii, jj)/2 ...
-                                + index_container_prev(ii, jj)/2);
-                            lower_index_bound = round(index_container(ii, jj)/2 ...
-                                +index_container_next(ii, jj)/2);
-                        end
-                        Inplane_direction(ii, jj, upper_index_bound: ...
-                            lower_index_bound) = orientation(indAng);
-                        % sum up the ID
-                        ID_sum = ID_sum + ID;
-                    end
+                % ********************** search for the max
+                % *********** to accelerate, premise: average distributed orientation
+                [~, Idx_1d] = max(gaborMagnitude, [], 3);
+                indAng_2d   = floor(Idx_1d/length(wavelength));
+                Ang         = orientation(1) + indAng_2d *(orientation(2) - orientation(1));
+                if i==1
+                    upper_index_bound = mean(index_container, 'all', 'omitnan');
+                    lower_index_bound = mean(index_container, 'all', 'omitnan')/2 ...
+                        + mean(index_container_next, 'all', 'omitnan')/2;
+                elseif i==length(ratios)
+                    upper_index_bound = mean(index_container, 'all', 'omitnan')/2 ...
+                        + mean(index_container_prev, 'all', 'omitnan')/2;
+                    lower_index_bound = mean(index_container, 'all', 'omitnan');;
+                else
+                    upper_index_bound = mean(index_container, 'all', 'omitnan')/2 ...
+                        + mean(index_container_prev, 'all', 'omitnan')/2;
+                    lower_index_bound = mean(index_container, 'all', 'omitnan'  )/2 ...
+                        + mean(index_container_next, 'all', 'omitnan')/2;
                 end
-                % save the summary ID
-                ID_sum_all(i, :, :) = ID_sum;
-                [~, I]              = max(ID_sum(:));
-                [~, indAng]         = ind2sub(size(ID_sum),I);
-                Inplane_direction_overall(:, :, upper_index_bound: ...
-                    lower_index_bound) = orientation(indAng);
+                Inplane_direction(:, :, round(upper_index_bound): round(lower_index_bound)) = ...
+                    repmat(Ang, 1, 1, round(lower_index_bound)-round(upper_index_bound)+1);
+                % ******************
+%                 ID_sum   = zeros(length(wavelength), length(orientation));
+%                 [lx, ly] = size(gaborMagnitude(:, :, 1));
+%                 for ii = wl_max + 1: lx - wl_max
+%                     for jj = wl_max + 1: ly - wl_max
+% %                         ID     = squeeze(gaborMagnitude(ii, jj, :));
+% %                         ID     = reshape(ID, [row_ga, col_ga]);
+% %                         [C, I] = max(ID(:));
+% %                         if C <= mean(ID,'all') + 0*std(ID, 0, 'all') % no significate maximum, thus skip
+% %                             continue;
+% %                         end
+%                         indAng = indAng_2d(ii, jj);
+%                         if i==1
+%                             upper_index_bound = index_container(ii, jj);
+%                             lower_index_bound = round(index_container(ii, jj)/2 ...
+%                                 +index_container_next(ii, jj)/2);
+%                         elseif i==length(ratios)
+%                             upper_index_bound = round(index_container(ii, jj)/2 ...
+%                                 + index_container_prev(ii, jj)/2);
+%                             lower_index_bound = index_container(ii, jj);
+%                         else
+%                             upper_index_bound = round(index_container(ii, jj)/2 ...
+%                                 + index_container_prev(ii, jj)/2);
+%                             lower_index_bound = round(index_container(ii, jj)/2 ...
+%                                 +index_container_next(ii, jj)/2);
+%                         end
+%                         Inplane_direction(ii, jj, upper_index_bound: ...
+%                             lower_index_bound) = orientation(indAng);
+%                         % sum up the ID
+% %                         ID_sum = ID_sum + ID;
+%                     end
+%                 end
+%                 %                 % save the summary ID
+%                 %                 ID_sum_all(i, :, :) = ID_sum;
+%                 %                 [~, I]              = max(ID_sum(:));
+%                 %                 [~, indAng]         = ind2sub(size(ID_sum),I);
+%                 Inplane_direction_overall(:, :, upper_index_bound: ...
+%                     lower_index_bound) = orientation(indAng);
                 % end loop in one Cscan
                 disp([num2str(ratios(i)), '/', num2str(ratios(end))]);
             end
             obj.Inplane_direction_3D_ID         = Inplane_direction;
-            obj.Inplane_direction_3D_overall_ID = Inplane_direction_overall;
-            obj.ID_sum_overall_ID               = ID_sum_all;
+%             obj.Inplane_direction_3D_overall_ID = Inplane_direction_overall;
+%             obj.ID_sum_overall_ID               = ID_sum_all;
         end
-        
         
         function obj = extract_local_orientation_3D_plywise_allwl(obj, PropertyName, wavelength, orientation, ratios, plies, K, sigma_curvelet)
             % extract the local orientation image in each ply
@@ -8914,8 +9551,8 @@ classdef class_process_RFdata
                     %                     disp([num2str(p), ' / ', num2str(plies), ':', num2str(ratio_index)]);
                 end
                 %                 % end loop in one Cscan
-                toc;
-                disp([num2str(p), ' / ', num2str(plies)]);
+                clc;
+                fprintf('ID searching progress: %0.2f%%\n',100*i/length(orientation));
             end
             obj.Inplane_direction_3D_ID         = Inplane_direction;
             obj.Inplane_direction_3D_overall_ID = Inplane_direction_overall;
@@ -9008,7 +9645,7 @@ classdef class_process_RFdata
             %             set(gca, 'ZDir', 'reverse');
         end
         
-        function show_inplane_direction_3D_ID(obj, xslice, yslice, zslice, mfsize, angle_compens)
+        function show_inplane_direction_3D_ID(obj, xslice, yslice, zslice, ~, angle_compens)
             % demonstrate the 3d inplane_direction extracted by Gabor filter
             % demonstrate the ID_sum_overall
             % xslice, yslice, zslice: the index to select the slices,
@@ -9035,8 +9672,8 @@ classdef class_process_RFdata
             x_col = obj.col(mask) / obj.fy * 1e3;  % / obj.fy * 1e3 ;
             x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
             if sum(isnan(obj.front_I), 'all')==0
-                inph_ex(:,:,1:round(mean(obj.front_I, 'all')-50)) = nan;
-                inph_ex(:,:,round(mean(obj.rear_I, 'all')+50):end) = nan;
+                inph_ex(:,:,1:round(mean(obj.front_I, 'all', 'omitnan')-50)) = nan;
+                inph_ex(:,:,round(mean(obj.rear_I, 'all', 'omitnan')+50):end) = nan;
                 h1 = scatter3(xslice * ones(1, size(inph_ex, 1)), ...
                     y, obj.front_I(:, x_idx)/ obj.fs * 1e3 * 3000/2, ...
                     3, 'black', 'filled', 'DisplayName','Front surface');
@@ -9045,7 +9682,7 @@ classdef class_process_RFdata
                     y, obj.rear_I(:, x_idx)/ obj.fs * 1e3 * 3000/2, ...
                     3, [0.75 0.75 0.75], 'filled', 'DisplayName','Rear surface');
                 hold on;
-                h3 = scatter3(ax, x_col, x_row, x_dep, ...
+                scatter3(ax, x_col, x_row, x_dep, ...
                     3, [122 122 121]/255, 'filled', ...
                     'DisplayName','Interply track');
                 hold on;
@@ -9154,7 +9791,7 @@ classdef class_process_RFdata
             %             set(gca, 'ZDir', 'reverse');
         end
         
-        function [m_fiber_angle, std_fiber_angle, yhat, Idof_N] = calculate_m_std_fiber_angle(obj, PropertyName, PropertyName_IFD, ratio, ratio_next, angle_compens)
+        function [m_fiber_angle, std_fiber_angle, yhat, Idof_N] = calculate_m_std_fiber_angle(obj, PropertyName, PropertyName_IFD, ratio, ~, angle_compens)
             % calculate the mean fiber angle and its standard deviation
             % PropertyName: the property for defining the index
             % PropertyName_IFD: the property for extracting the inplane fiber direction
@@ -9178,7 +9815,7 @@ classdef class_process_RFdata
             end
             % minus the ref_angle to get the diff
             %             Inplane_direction_oneply = Inplane_direction_oneply - ref_angle;
-            Idof_edge    = [0:180] - 22;
+            Idof_edge    = (0:180) - 22;
             Idof_N       = histcounts(Inplane_direction_oneply, Idof_edge);
             %             Idof_N       = circshift(Idof_N, 22); % shift 22 degree for fitting
             %************************* Gaussian fitting ********************
@@ -9191,9 +9828,9 @@ classdef class_process_RFdata
             numGaussians = 4;
             [amp, parameter, yhat] = fx_multi_Gaussianfitting(...
                 numGaussians, Idof_edge(1:180), Idof_N, centers, sigmas, amplitudes);
-            [C, amp_I]      = max(amp'.*parameter(2:2:end));
+            [~, amp_I]      = max(amp'.*parameter(2:2:end));
             m_fiber_angle   = parameter(amp_I*2-1);
-            std_fiber_angle = amp(amp_I);
+%             std_fiber_angle = amp(amp_I);
             % *************************
             % make sure the diff is less than 90 or larger than -90
             %             Inplane_direction_oneply(Inplane_direction_oneply>90) = ...
@@ -9234,7 +9871,7 @@ classdef class_process_RFdata
             end
             % minus the ref_angle to get the diff
             %             Inplane_direction_oneply = Inplane_direction_oneply - ref_angle;
-            Idof_edge = [0.5:180.5];
+            Idof_edge = 0.5:180.5;
             Idof_N    = histcounts(Inplane_direction_oneply, Idof_edge);
             Idof_N    = circshift(Idof_N, 22+angle_compens);
         end
@@ -9503,8 +10140,8 @@ classdef class_process_RFdata
             % save all the file of the 3D orientation
             % loadname: the name incl. the path and the file for loading
             % load member variables
-            load(loadname);
-            obj.Inplane_direction_3D                    = Inplane_direction_3D_var;
+            temp = load(loadname);
+            obj.Inplane_direction_3D                    = temp.Inplane_direction_3D_var;
             obj.Inplane_direction_3D_overall            = Inplane_direction_3D_overall_var;
             obj.ID_sum_overall                          = ID_sum_overall_var;
             obj.Inplane_direction_3D_ID                 = Inplane_direction_3D_ID_var;
@@ -9575,15 +10212,15 @@ classdef class_process_RFdata
                     mask  = (obj.row==index) & obj.col>=win(1) & obj.col<=win(end);
                     x_row = obj.col(mask) / obj.fx * 1e3;
                     x_dep = obj.dep(mask) / obj.fs * 1e3 * 3000/2;  % / obj.fy * 1e3 ;
-                    h1 = scatter(x_row, x_dep, ...
+                    scatter(x_row, x_dep, ...
                         3,  [122 122 121]/255, 'filled', ...
                         'DisplayName','Interply track');
                     hold on;
-                    h2 = scatter(x, front_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
+                    scatter(x, front_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
                         3, 'red', 'filled', ...
                         'DisplayName','Front surface');
                     hold on;
-                    h3 = scatter(x, bakc_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
+                    scatter(x, bakc_p(index, win)/ obj.fs * 1e3 * 3000/2, ...
                         3, 'magenta', 'filled', ...
                         'DisplayName','Rear surface');
                     hold on;
@@ -9634,6 +10271,7 @@ classdef class_process_RFdata
             inph_ex = obj.Inplane_direction_3D_ID;
             %             front_I = obj.front_I;
             [~, ~, lz] = size(inph_ex);
+            %             Idof_edge  = linspace(-90, 90, length(obj.theta_LG));
             Idof_edge  = -90:90;
             Idof_Ns    = nan(length(Idof_edge)-1, lz);
             for i = 1:lz
@@ -9644,9 +10282,10 @@ classdef class_process_RFdata
             end
             front_I_ave = mean(obj.front_I, 'all', 'omitnan');
             rear_I_ave  = mean(obj.rear_I, 'all', 'omitnan');
-            Idof_Ns     = circshift(Idof_Ns, -22, 1);
-            Idof_edge   = Idof_edge-22;
-            figure;
+            Idof_Ns    = circshift(Idof_Ns, -22, 1);
+            Idof_edge = Idof_edge + 22;
+%             Idof_edge = Idof_edge + 22 * round(180/length(obj.theta_LG));
+            figure('Name', ['Angle_distribution_3D']);
             imagesc(Idof_edge, (1:lz)/obj.fs*1e6, Idof_Ns.');
             colormap(jet);
             h = colorbar;
@@ -9662,44 +10301,7 @@ classdef class_process_RFdata
             set(gca, 'fontsize', 16);
             set(gca, 'linewidth', 1.5);
         end
-        % ************************ Global orientation extract ********************
-        function obj = extract_gloabl_orientation_3D(obj, PropertyName, wavelength, orientation, ratios, max_layer, SFB, SAR, K)
-            % extract the local orientation image in each ply
-            % PropertyName: 'img', 'img_hil' or 'img_hil_filter' ...
-            % wavelength: wavelengths of the filter bank for logGabor filter gabor
-            % orientation: orientations of the filter bank for logGabor filter gabor
-            % ratios: the depth in each ply
-            % max_layer: the total plies of the structure
-            % SFB, SAR: SpatialFrequencyBandwidth and SpatialAspectRatio
-            % K: the smoothing applied to the Gabor magnitude responses.
-            % ***
-            gaborArray             = gabor(wavelength, orientation, ...
-                'SpatialFrequencyBandwidth', SFB, 'SpatialAspectRatio', SAR);
-            wl_max                 = max(wavelength);
-            Inplane_direction      = NaN(size(obj.(PropertyName)));
-            Inp_direc_domain       = NaN(size(obj.(PropertyName)));
-            Inp_direc_domain_layer = NaN(size(obj.(PropertyName)));
-            ratio_spacing          = (ratios(end) - ratios(1)) / (length(ratios) - 1);
-            for i = 1:max_layer
-                ID_sum_layer = zeros(length(wavelength), length(orientation));
-                for j = 1:length(ratios)
-                    ratio                                          = ratios(j);
-                    [Cscan_inam, profile_layer, profile_layer_pre] = obj.define_Cscan_depthprofile_knn(i, ratio, PropertyName, max_layer);
-                    %                     % fillna and smooth the profile
-                    %                     profile_layer                                  = fx_inpaint_nans(profile_layer, 5);
-                    %                     profile_layer_pre                              = fx_inpaint_nans(profile_layer_pre, 5);
-                    profile_layer                                  = medfilt2(profile_layer, [7, 7]);
-                    profile_layer_pre                              = medfilt2(profile_layer_pre, [7, 7]);
-                    
-                end
-                % end loop in one Cscan
-                disp([num2str(i), '/', num2str(max_layer), ' layer']);
-            end
-            obj.Inplane_direction_3D               = Inplane_direction;
-            obj.Inplane_direction_3D_overall       = Inp_direc_domain;
-            obj.Inplane_direction_3D_overall_layer = Inp_direc_domain_layer;
-        end
-        
+
         % *********************** kNN clustering for interply track *********************
         function obj = show_interply_track_3D(obj)
             % convert the mask_plytrack to ordinates of 3d scattering points
@@ -9721,7 +10323,7 @@ classdef class_process_RFdata
             %                 end
             %                 disp([num2str(i) '/' num2str(size(temp, 1))]);
             %             end
-            cf = figure();
+            figure();
             scatter3(obj.row, obj.col, obj.dep, 10, obj.layer_counts.^4, 'o', 'filled');
             set(gca, 'ZDir', 'reverse');
             obj.X_scatter = [obj.row; obj.col; obj.dep]';
@@ -9735,8 +10337,8 @@ classdef class_process_RFdata
             % nbins: number of bins for the hist
             [obj.cIdx, obj.cD] = knnsearch(obj.X_scatter, obj.X_scatter, 'K', K, 'NSMethod', 'kdtree', 'Distance', 'Minkowski', 'P', P);
             % hist the distances
-            cf = figure();
-            h = histogram(mean(obj.cD, 2), nbins);
+            figure();
+            histogram(mean(obj.cD, 2), nbins);
             set(gca,'YScale','log');
             xlabel('\fontname {times new roman} Average distance to k nearest neighbors (arb.) ', 'fontsize', 16);
             ylabel('\fontname {times new roman} Count', 'fontsize', 16);
@@ -9758,7 +10360,7 @@ classdef class_process_RFdata
                     disp([num2str(i) '/' num2str(length(obj.layer_counts))]);
                 end
             end
-            cf = figure();
+            figure();
             scatter3(obj.row, obj.col, obj.dep, 10,  obj.layer_counts_new.^4, 'o', 'filled');
             set(gca, 'ZDir', 'reverse');
             zlim([1000 1250]);
@@ -9784,7 +10386,7 @@ classdef class_process_RFdata
                 oneply_dep_2D(oneply_row(i), oneply_col(i)) = (oneply_dep(i) - ...
                     obj.front_I(oneply_row(i), oneply_col(i))) / obj.fs * 1e3 * v / 2;
             end
-            cf = figure();
+            figure();
             ax = subplot(1, 1, 1);
             x = (1:size(oneply_dep_2D, 1)) / obj.fx * 1e3;
             y = (1:size(oneply_dep_2D, 2)) / obj.fy * 1e3;
