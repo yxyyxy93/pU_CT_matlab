@@ -2691,7 +2691,7 @@ classdef class_process_RFdata
             obj.rear_I  = rear_I_temp;
         end
         
-        % autocorrelation
+        % ********************************** autocorrelation
         function [obj, map_depth_BWE] = find_surface_autocorr_reference( ...
                 obj, PropertyName, max_len, sampling_rate, figurename)
             % determining the front surface index by autocorrelation
