@@ -2727,7 +2727,8 @@ classdef class_process_RFdata
 %             mL_ori        = L*sampling_rate * 2;
 %             temp_fft_ave  = cat(1, temp_fft_ave(f_lo:f_up), zeros(mL_ori/2-(f_up-f_lo+1), 1));
             temp_fft2_ave = ifft(temp_fft_ave);
-            temp_fft2_ave = abs(temp_fft2_ave(1:end/2));
+            temp_fft2_ave = temp_fft2_ave(1:end/2);
+            temp_fft2_ave = abs(temp_fft2_ave);
             % ********** signal fft and fft2
             temp_fft     = fft(img_temp, L, 3);
             temp_fft_abs = temp_fft .* conj(temp_fft);
