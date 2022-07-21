@@ -9,7 +9,7 @@ clear;
 FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Impact_damaged_sample\";   % the destination folder
 save(strcat(FolderName, Filename1(1:end-4), '.mat'), '-v7.3');
 
-Filename1 = 'BAM_confidential.mat';
+Filename1 = '04062020_15h49m34s_PE.mat';
 load(strcat(FolderName, Filename1));
 % '20220207_BP1_3_025m_V313_25db_PEmat.mat'
 % 14122020_12h08m51s.mat
@@ -28,9 +28,9 @@ process3               = class_process_woven_RFdata(filename);
 % process3.fy = 1 / 0.25e-3; % unit: 1 / m
 
 % for CFRP-2-07122020_12h07m41smat
-process3.fs = 100e6; % MHz
-process3.fx = 1 / 1.2e-3; % unit: 1 / m
-process3.fy = 1 / 1.2e-3; % unit: 1 / m
+process3.fs = 125e6; % MHz
+process3.fx = 1 / 0.25e-3; % unit: 1 / m
+process3.fy = 1 / 0.25e-3; % unit: 1 / m
 
 % % read the settings from excel
 % [Filename1, Pathname1] = uigetfile({'*.xlsx'}, 'select the file');
@@ -42,10 +42,11 @@ process3      = process3.read_origin_data; % read (reset) the dataset
 
 sampling_rate = 1;
 
+
 %% cut window
-window   = [1 801 1 801 1 5700];  
-x_step   = 2;
-y_step   = 2;
+window   = [1 321 1 320 1 1500];  
+x_step   = 3;
+y_step   = 3;
 process3 = process3.cut_edges(window, x_step, y_step);
 process3.show_img_shape;
 
@@ -60,9 +61,46 @@ process3 = process3.read_origin_data; % read (reset) the dataset
 ratio    = 10e3;
 process3 = process3.time_varying_gain(ratio);
 
-%% show A scan - time gate 
-max_len = 5170;
-process3.show_Ascan_timegate([5 110 150 270], [5 110 150 220], max_len);
+%% show A scan
+% define the index to select Ascan 
+x   = 2;
+y   = 2;
+% process3.demo_AS_3D_inclinfq(x, y);
+process3.show_hilbert_Ascan(x, y);
+
+%% show A scan - noise
+close all;
+
+x   = 10;
+y   = 10;
+noises_snr = [20 10 5];
+seed       = 1;
+max_len    = 1200;
+process3.show_Ascan_addnoise(x, y, noises_snr, seed, max_len);
+
+%% show A scan - sampling rate
+close all;
+
+x   = 10;
+y   = 10;
+max_len = 1200;
+
+% samling_rates = [250/25 250/15];
+samling_rates = [125/125 125/25 125/20 125/15];
+process3.show_Ascan_resample(x, y, samling_rates, max_len)
+
+%% show A scan - sampling rate and added noise
+close all;
+
+x   = 10;
+y   = 10;
+max_len = 1200;
+
+% samling_rates = [250/25];
+noises_snr = [10 20];
+sampling_rates = [125/20];
+
+process3.show_Ascan_resample_addnoise(x, y, sampling_rates, noises_snr, max_len)
 
 %% read reference signal
 [Filename1, Pathname1] = uigetfile({'*.tdms'},  'select the file');   
@@ -80,6 +118,18 @@ process3 = process3.align_refer_ascan(x, y);
 
 % process3.show_reference_signal;
        
+%% show A scan - different center frequencies
+x   = 55;
+y   = 75;
+Fcs = [4, 3, 2] * 1e6;
+process3.show_Ascan_freqManipulation(x, y, Fcs)
+
+%% frequency manipulation dataset
+clc;
+close all;
+Fc            = 5e6;
+process3      = process3.data_freqManipulation(Fc);
+sampling_rate = 1; % for reset the sampling_rate
 
 %% show A scan - 2nd fft
 close all;
@@ -90,6 +140,28 @@ max_len = 1200;
 process3.show_Ascan_timegate([5 110 150 270], [5 110 150 220], max_len);
 
 % 20220612: [5 100 140], [5 100 140]
+
+%% surface search one signal
+global min_pks 
+min_pks      = 0.5;
+% PropertyName = 'img_hil_filter';
+PropertyName = 'img_hil';
+% PropertyName = 'img_hil_noise';
+% process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
+clc;
+close all;
+
+MinPD   = 25;
+MinPW   = 0.01;  % these 2 parameters need to be changed for surface estimation.
+% surface calculation
+max_len = 1500/sampling_rate;
+alpha   = 3e-3;
+A_ratio = 0.8;
+
+x = 80;
+y = 90;
+
+process3.find_front_amp_alpha_Ascan(MinPD, MinPW, PropertyName, max_len, alpha, A_ratio, x, y);
 
 %% surface search all signals
 % A_ratio      = 0.4; % for 0.3 m drop
@@ -132,12 +204,46 @@ PropertyName = 'img_hil';
 % PropertyName = 'img_WienerDeconv';
 process3 = process3.find_damage_timewin(PropertyName, max_len, flag, delay, front_I_max, sampling_rate);
 
+%% draw arbitary shape and statistic
+temp = process3.depth_2D;
+figure; ca = subplot(1, 1, 1);
+imagesc(ca, temp); 
+colormap(jet);
+caxis([0 6]);
+% [xi,yi] = getpts(ca);
+% BW = poly2mask(xi,yi, size(temp, 1), size(temp, 2));
+
+%
+temp1 = temp;
+temp1(~BW) = nan;
+
+figure;
+pcolor(temp1(end:-1:1, :));
+shading flat;
+hold on; colormap jet;
+caxis([0.8 1]);
+h = colorbar;
+set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
+axis off;
+% %
+% nbins  = 20;
+% edges  = linspace(0.85, 1, nbins);
+% Idof_N = histcounts(temp1(:), edges);
+% figure('Name', ['depth_distribution_ID_2dfft_reference']);
+% set(gcf, 'Position', [0, 0, 800, 400], 'color', 'white');
+% h1 = bar(edges(2:end), Idof_N/sum(Idof_N), 'BarWidth', 1);
+
+mean_1 = mean(temp(BW), 'omitnan');
+std_1  = std(temp(BW), 'omitnan');
+disp(mean_1);
+disp(std_1);
+
 %% check 2 times fft
 % close all;
 clc;
 
-x = 50 * process3.fx / 1e3;
-y = 50 * process3.fy / 1e3;
+x = 8 * process3.fx / 1e3;
+y = 80 * process3.fy / 1e3;
 % x = 55;
 % y = 75;
 
@@ -146,12 +252,13 @@ temp_img = real(process3.img_hil);
 % temp_img = real(process3.img_WienerDeconv);
 % temp_img = real(process3.img_hil_filter);
 
-temp   = temp_img(round(x), round(y), :);
+temp   = temp_img(x, y, :);
 temp   = squeeze(temp);
 Fs_red = process3.fs/sampling_rate;
 % 
 L = length(temp);
-L = L;
+L = 2*L;
+% L = 2^nextpow2(L);
 
 % DynamicGate = exp((1:L)/L);
 % temp        = temp .* DynamicGate.';
@@ -198,7 +305,7 @@ temp_fft_max = max(temp_fft_abs);
 % temp_fft(1:round(1e6/Fs*L))    = 0;
 % temp_fft = temp_fft(round(1e6/Fs*L):round(8e6/Fs*L));
 f_red        = Fs_red/L:Fs_red/L:Fs_red/2;
-f_lo         = find(f_red<=0.1e6, 1, 'last' );f_up = find(f_red>=3e6, 1);
+f_lo         = find(f_red<=1e6, 1, 'last' );f_up = find(f_red>=10e6, 1);
 %             L_ori = 2^nextpow2(size(img_temp, 3)*sampling_rate);
 L_ori        = L*sampling_rate;
 temp_fft_abs = temp_fft_abs(f_lo:f_up);
@@ -260,6 +367,35 @@ set(gca, 'fontname', 'Times new roman');
 set(gca, 'linewidth', 1.5);
 % 
 
+%% add noise
+% process3 = process3.read_origin_data; % read (reset) the dataset
+% process3 = process3.cut_edges(window, x_step, y_step);
+max_len  = 1200;
+snr      = 5;
+process3 = process3.addnoise(snr, max_len);
+% close all;
+% dBW      = -5;
+% seed     = 1;
+% process3 = process3.addnoise_bydBW(dBW);
+
+%% downsample dataset
+% process3 = process3.read_origin_data; % read (reset) the dataset
+% process3 = process3.cut_edges(window, x_step, y_step);
+% snr      = 15;
+% process3 = process3.addnoise(snr);
+close all;
+% sampling_rate = 250/15;
+sampling_rate = 10;
+process3      = process3.data_downsample(sampling_rate);
+
+%% add noise and downsample dataset
+snr = [15];
+close all;
+sampling_rate = [125/20 125/15];
+% sampling_rate = 8;
+max_len       = 1200;
+process3      = process3.data_downsample_addnoise(sampling_rate, snr, max_len);
+
 %% 2 times fft determining the depth and imaging
 % close all;
 clc;
@@ -269,8 +405,8 @@ PropertyName = 'img_hil';
 % PropertyName = 'img_hil_filter';
 % PropertyName = 'img_WienerDeconv';
 
-max_len     = 5170;
-delay       = 120;
+max_len     = 1200;
+delay       = 40;
 filter_flag = 0;
 bwr         = -10; % dB
 
@@ -379,6 +515,30 @@ legend(strcat('sampling rate =', legendFs, ' MS/s'));
 xlim([2 40]);
 set(gca, 'fontsize', 16);
 set(gca, 'linewidth', 1.5);
+
+
+%% auto correlation
+% close all;
+clc;
+
+x = 8 * process3.fx / 1e3;
+y = 80 * process3.fy / 1e3;
+
+temp_img = real(process3.img_hil);
+
+[lx, ly, L] = size(temp_img);
+%autocorrelation
+tau = 0:L/2;
+ac  = nan(length(tau), 0);
+for i = tau
+    a = temp(1:end-i);
+    b = temp(1+i:end)';
+    ac(1+i) = sum(b * a);
+end
+
+
+
+
 
 
 %% check cepstrum

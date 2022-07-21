@@ -43,9 +43,9 @@ process3      = process3.read_origin_data; % read (reset) the dataset
 sampling_rate = 1;
 
 %% cut window
-window   = [1 321 1 320 1 1500];  
-x_step   = 3;
-y_step   = 3;
+window   = [1 801 1 801 1 5000];  
+x_step   = 2;
+y_step   = 2;
 process3 = process3.cut_edges(window, x_step, y_step);
 process3.show_img_shape;
 
@@ -414,6 +414,18 @@ process3 = process3.find_surface_2fft_imaging_reference(PropertyName, max_len, f
 % process3.find_surface_2fft_imaging_window(PropertyName, max_len, delay, filter_flag, bwr, sampling_rate);
 % process3.find_surface_2fft_imaging_wavelet(PropertyName, filter_flag, sampling_rate);
 
+%% auto-correlation
+% close all;
+clc;
+
+PropertyName = 'img_hil';
+
+max_len     = 1200;
+
+process3 = process3.find_surface_autocorr_reference(...
+    PropertyName, max_len, sampling_rate, 'original');
+
+            
 %% amplitude drop method to determine the defect size
 close all;
 
