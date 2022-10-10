@@ -70,9 +70,9 @@ process3.show_hilbert_Ascan(x, y);
 %% show A scan - noise
 close all;
 
-x   = 10;
-y   = 10;
-noises_snr = [20 10 5];
+x   = 110;
+y   = 110;
+noises_snr = [1e8 20 10 5];
 seed       = 1;
 max_len    = 1200;
 process3.show_Ascan_addnoise(x, y, noises_snr, seed, max_len);
@@ -86,7 +86,7 @@ max_len = 1200;
 
 % samling_rates = [250/25 250/15];
 samling_rates = [125/125 125/25 125/20 125/15];
-process3.show_Ascan_resample(x, y, samling_rates, max_len)
+process3.show_Ascan_resample(x, y, samling_rates, max_len);
 
 %% show A scan - sampling rate and added noise
 close all;
@@ -118,9 +118,9 @@ process3 = process3.align_refer_ascan(x, y);
 % process3.show_reference_signal;
        
 %% show A scan - different center frequencies
-x   = 55;
+x   = 10;
 y   = 75;
-Fcs = [4, 3, 2] * 1e6;
+Fcs = [10, 3, 2] * 1e6;
 process3.show_Ascan_freqManipulation(x, y, Fcs)
 
 %% frequency manipulation dataset
@@ -135,56 +135,15 @@ close all;
 process3.show_Ascan_2dfft(20:20:200, 20:20:200, max_len);
 
 %% show A scan - time gate 
+close all;
 max_len = 1200;
 process3.show_Ascan_timegate([5 110 150 270], [5 110 150 220], max_len);
 
 % 20220612: [5 100 140], [5 100 140]
 
-%% surface search one signal
-global min_pks 
-min_pks      = 0.5;
-% PropertyName = 'img_hil_filter';
-PropertyName = 'img_hil';
-% PropertyName = 'img_hil_noise';
-% process3.show_Ascan_inam_peaks(172, 150, MinPD, MinPH, PropertyName); % x, y
+%% normal time window
 clc;
 close all;
-
-MinPD   = 25;
-MinPW   = 0.01;  % these 2 parameters need to be changed for surface estimation.
-% surface calculation
-max_len = 1500/sampling_rate;
-alpha   = 3e-3;
-A_ratio = 0.8;
-
-x = 80;
-y = 90;
-
-process3.find_front_amp_alpha_Ascan(MinPD, MinPW, PropertyName, max_len, alpha, A_ratio, x, y);
-
-%% surface search all signals
-% A_ratio      = 0.4; % for 0.3 m drop
-% process3     = process3.find_front_amp_alpha_maxfront(MinPD, MinPW, PropertyName, max_len, alpha, A_ratio);
-process3     = process3.find_front_amp_alpha(MinPD, MinPW, PropertyName, max_len, alpha, A_ratio);
-filename_fig = filename;
-close all;
- 
-process3.show_surfaces(filename_fig(1:end-5));
-
-flag = 1; % using depth property % flag==1: using front and back surface to calculate
-process3.damage_depth_imaging(flag);
-
-%% low pass filter
-% PropertyName = 'img_hil';
-% PropertyName = 'img_hil_noise';
-
-% low-pass filter
-Fc           = 5e6;
-bandpassFreq = 2 * Fc;
-process3     = process3.Filter_lowpass(bandpassFreq, PropertyName, sampling_rate);
-
-%% normal time window
-% close all;
 
 flag = 0;
 % % for 2-CEH105-24-p5-6-030m_GEH5M
@@ -194,8 +153,8 @@ flag = 0;
 % for CFRP-2-07122020_12h07m41smat
 % delay       = 31;
 delay       = 40;
-max_len     = 1200;
-front_I_max = 1200; 
+max_len     = 1500;
+front_I_max = 1500; 
 
 % PropertyName = 'img_hil_filter';
 % PropertyName = 'img_hil_noise';
@@ -220,7 +179,7 @@ figure;
 pcolor(temp1(end:-1:1, :));
 shading flat;
 hold on; colormap jet;
-caxis([0.8 1]);
+caxis([0.88 0.95]);
 h = colorbar;
 set(get(h, 'Title'), 'string', '\fontname {times new roman}\fontsize {16} Depth (mm)');
 axis off;
@@ -236,135 +195,6 @@ mean_1 = mean(temp(BW), 'omitnan');
 std_1  = std(temp(BW), 'omitnan');
 disp(mean_1);
 disp(std_1);
-
-%% check 2 times fft
-% close all;
-clc;
-
-x = 8 * process3.fx / 1e3;
-y = 80 * process3.fy / 1e3;
-% x = 55;
-% y = 75;
-
-% temp_img = real(process3.img_hil_noise);
-temp_img = real(process3.img_hil);
-% temp_img = real(process3.img_WienerDeconv);
-% temp_img = real(process3.img_hil_filter);
-
-temp   = temp_img(x, y, :);
-temp   = squeeze(temp);
-Fs_red = process3.fs/sampling_rate;
-% 
-L = length(temp);
-L = 2*L;
-% L = 2^nextpow2(L);
-
-% DynamicGate = exp((1:L)/L);
-% temp        = temp .* DynamicGate.';
-figure,
-% t_space = 1/Fs:1/Fs:L/Fs;
-plot(temp, 'LineWidth', 2);
-hold on;
-plot(abs(temp), 'LineWidth', 2);
-
-temp_fft = fft(temp, L);
-temp_fft = temp_fft(1:round(end/2));
-
-temp_fft_abs = abs(temp_fft);
-
-% temp_fft_abs = diff(temp_fft_abs, 1) ./ temp_fft_abs(2:end);
-temp_fft_max = max(temp_fft_abs);
-
-% % *********** wavelet ************
-% wv = 'db3';
-% [c,l] = wavedec(temp_fft_abs, 4, wv);
-% % remove a4
-% c(1:l(1))    = 0 * c(1:l(1));
-% c(l(1):l(2)) = 0 * c(l(1):l(2));
-% c(l(2):l(3)) = 1 * c(l(2):l(3));
-% temp_rec = waverec(c, l, wv);
-% figure,
-% plot(temp_fft_abs, 'LineWidth', 2, 'DisplayName', 'spectrum');
-% hold on;
-% plot(temp_rec, 'LineWidth', 2, 'DisplayName', 'wavelet rec.');
-% hold on;
-% plot(diff(temp_fft_abs), 'LineWidth', 2, 'DisplayName', 'diff');
-% temp_fft_abs = temp_rec;
-% % ***********************
-
-% temp_fft_abs(temp_fft_abs<temp_fft_max-3) = temp_fft_max-3;
-
-% figure,
-% plot(diff(temp_fft_abs), 'LineWidth', 2);
-
-% % *********** band selection **********
-% w = hann(round(10e6/Fs*L));
-% temp_fft = temp_fft .* [w; zeros(length(temp_fft)-length(w), 1)];
-% temp_fft(round(10e6/Fs*L):end) = 0;
-% temp_fft(1:round(1e6/Fs*L))    = 0;
-% temp_fft = temp_fft(round(1e6/Fs*L):round(8e6/Fs*L));
-f_red        = Fs_red/L:Fs_red/L:Fs_red/2;
-f_lo         = find(f_red<=1e6, 1, 'last' );f_up = find(f_red>=10e6, 1);
-%             L_ori = 2^nextpow2(size(img_temp, 3)*sampling_rate);
-L_ori        = L*sampling_rate;
-temp_fft_abs = temp_fft_abs(f_lo:f_up);
-% *************** find valley ****************
-% findpeaks(-temp_fft_abs);
-% figure, plot(valley_I);
-% *************
-temp_fft_abs = cat(1, temp_fft_abs, zeros(L_ori/2-(f_up-f_lo+1), 1));
-figure,
-plot(temp_fft_abs, 'LineWidth', 2);
-% *********************
-
-% f_space  = 0:Fs/L:Fs/2;
-% temp_fft = cat(1, temp_fft, zeros(L*sampling_rate-length(temp_fft), 1));
-
-temp_fft2_signal = fft(temp_fft_abs);
-% t_space_2        = 0:2/Fs:L/Fs/2;
-temp_fft2_signal = temp_fft2_signal(1:round(end/2));
-figure,
-plot(abs(temp_fft2_signal), 'LineWidth', 2);
-% 
-% ************ reference signal
-% A_scan_Ave    = squeeze(mean(temp_img(1:10,1:10,1:end/2), [1, 2]));
-A_scan_Ave   = process3.refer_Ascan_aligned;
-A_scan_Ave   = real(A_scan_Ave);
-temp_fft_Ave = fft(A_scan_Ave, L);
-temp_fft_Ave = abs(temp_fft_Ave(1:round(end/2)));
-% *********** band selection **********
-L_ori    = L*sampling_rate;
-% temp_fft_Ave = cat(1, temp_fft_Ave(f_lo:f_up), ones(L_ori/2-(f_up-f_lo+1), 1));
-temp_fft_Ave = cat(1, temp_fft_Ave, ones(L_ori/2-length(temp_fft_Ave)), 1);
-
-temp_fft2     = fft(abs(temp_fft_Ave), sampling_rate*L/2);
-temp_fft2_ave = abs(temp_fft2(1:round(end/2)));
-figure,
-plot(abs(temp_fft_Ave), 'LineWidth', 2);
-figure,
-plot((1:length(A_scan_Ave))/Fs, A_scan_Ave, 'LineWidth', 2);
-
-% % ******* divide
-% temp_fft_abs = temp_fft_abs./temp_fft_Ave;
-% figure,
-% plot(temp_fft_abs, 'LineWidth', 2);
-% figure,
-% plot(diff(temp_fft_abs), 'LineWidth', 2);
-% 
-% temp_fft2_signal = fft(temp_fft_abs);
-% % t_space_2        = 0:2/Fs:L/Fs/2;
-% temp_fft2_signal = temp_fft2_signal(1:round(end/2));
-% figure,
-% plot(abs(temp_fft2_signal), 'LineWidth', 2);
-
-% substract
-figure,
-plot(abs(temp_fft2_signal)/max(abs(temp_fft2_signal)) ...
-    - abs(temp_fft2_ave)/max(abs(temp_fft2_ave)), 'LineWidth', 2);
-set(gca, 'fontsize', 16);
-set(gca, 'fontname', 'Times new roman');
-set(gca, 'linewidth', 1.5);
-% 
 
 %% add noise
 % process3 = process3.read_origin_data; % read (reset) the dataset
@@ -396,7 +226,7 @@ max_len       = 1200;
 process3      = process3.data_downsample_addnoise(sampling_rate, snr, max_len);
 
 %% 2 times fft determining the depth and imaging
-% close all;
+close all;
 clc;
 
 PropertyName = 'img_hil';
@@ -417,15 +247,12 @@ process3 = process3.find_surface_2fft_imaging_reference(PropertyName, max_len, f
 %% auto-correlation
 % close all;
 clc;
-
 PropertyName = 'img_hil';
-
 max_len     = 1200;
 
 process3 = process3.find_surface_autocorr_reference(...
     PropertyName, max_len, sampling_rate, 'original');
 
-            
 %% amplitude drop method to determine the defect size
 close all;
 

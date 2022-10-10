@@ -4,246 +4,283 @@ close all;
 fclose all;
 clear;
 
-%% Define the class
-% read the preprocessed .mat
-[Filename1,Pathname1] = uigetfile({'*.mat'}, 'select the file');
-filename = strcat(Pathname1, Filename1);
-process = class_process_RFdata(filename);
+filevector = {'F:\Xiayang\2-ceh105-24-p5\v390\20220705_2-ceh105-24-p5_v390_25db_PE.mat', ...
+    'F:\Xiayang\2-ceh105-24-p5\v324\20220825_2-ceh105-24-p5_v324_22db_PE.mat', ...
+    'F:\Xiayang\2-ceh105-24-p5\v313\20220825_2-ceh105-24-p5_v313_23db_PE.mat', ...
+    'F:\Xiayang\2-ceh105-24-p5\v320\20220825_2-ceh105-24-p5_v320_17db_PE.mat', ...
+    ... 'F:\Xiayang\2-ceh105-24-p5\v306\20220705_2-ceh105-24-p5_v306_21db_PE.mat', ...
+    'F:\Xiayang\2-ceh105-24-p5\geh5m\20220825_2-ceh105-24-p5_h5m_8db_PE.mat'};
 
-% read the settings
-[Filename1,Pathname1]=uigetfile({'*.xlsx'}, 'select the file');
-settinig_file = strcat(Pathname1, Filename1);
-process = process.loadSettings(settinig_file);
-
-% read the data from the struct, or reset the dataset
-process = process.read_origin_data;
-% process = process.read_data; % read (reset) the dataset
-
-% define the index to select Ascan 
-x = 10;
-y = 10;
-
-%% EDA
-process.show_img_shape;
-% cut the img, otherwise it could be out of the memory
-% window = [101 180 81 160 1 1500];
-window = [21 120 21 120 1 1500]; 
-% window = [11 90 11 90 1 1500];  % for debug
-process = process.cut_edges(window);
-process.show_img_shape;
-process.show_surfaces;
-
-process.show_hilbert_Ascan(x, y);
-process.show_Cscan(500, 'img_hil');
-
-xslice =  50 / process.fx * 1e3;
-yslice = 50 / process.fy * 1e3;
-zslice = 1000 / process.fs * 1e6;
-process.show_inph_3d('img_hil', xslice, yslice, zslice);
-
-% filter and demo Scaleogram
-f0 = linspace(1e6, 15e6, 100);
-sigma = 0.8;
-process.show_logGabor_Scaleogram(f0, sigma, x, y);
-
-% filter the inph by logGabor filter
-% filtered
-f0 = 6.5e6;
-sigma = 0.8;
-process = process.Filter_logGabor(f0, sigma, 'img_hil');
-process.show_inph_3d('img_hil_filter', xslice, yslice, zslice);
-% calculate the unwraped inph 3D 
-% smoothing scale 
-sigma1 =[1, 1, 1];
-process = process.show_unwraped_inph_3d('img_hil', xslice, yslice, zslice, sigma1);
-
-%% surface calculation
-% x: x index
-% y: y index
-% MinPD: MinPeakDistance for findpeaks
-% MinPH: MinPeakHeight for findpeaks
-process.show_Ascan_inam_peaks(20, 20, 50, 0.2);
-% surface searching
-process = process.find_front_amp(50, 0.2, 'img_hil');
-process.show_surfaces;
-% 
-process = process.smooth_rear_I;
-process.show_surfaces;
-
-%% in-plane angles extract
-% define a parallel C_scan_inam
-center       = [40, 40];
-radii        = 20;
-dis_to_front = 0.85; % us
-process      = process.perfect_rear_surface;
-process      = process.define_parallel_inamCscan(dis_to_front, 'img', center, radii);
-
-% rotate the Cscan image 
-centers = 35:30:35 + 30*4;
-ls = 5:5:25;
-ws = 25:-5:5;
-degree = 30;
-for i = 1:length(centers)
-    center = [centers(i), centers(i)];
-    l = ls(i);
-    w = ws(i);
-    process = process.circle_rotate(l, w, center, degree);
-end
-
-% process = process.define_followUnwrapP_inamCscan(dis_to_front, 'img_hil');
-% extract the 1D angular map along the depth for one point
-radius             = 6:3:30;
-theta              = 1:1:180;
-x                  = 50;
-y                  = 50;
-distances_to_front = 0:0.01:3.7; % us
-process.extract_local_ID_AlongDepth_RT('img_hil', radius, theta, x, y, distances_to_front);
-
-% extract the inplane angles map from the parallel Cscan by RT
-radius = 6:3:30;
-theta = 1:1:180;
-process = process.compute_orientation_by_RT(radius, theta);
-% process = process.compute_orientation_by_RT_correct(radius, theta);
-% process.show_ID_RT(51, 46, radius, theta); % y, x
-% process.show_orientation_by_ID_RT(radius, theta);
-% check diff. radius
-for r_idx = 1:length(radius)
-    process.show_orientation_by_ID_RT_oneradius(r_idx, radius, theta);
-end
-
-% extract 3D inplane angles by parallel Cscans, RT
-distances_to_front = 0:0.01:3.7; % us
-tic;
-process = process.extract_local_orientation_RT_3D_parallel('img_hil', radius, theta, distances_to_front);
-toc;
-%
-tic;
-process = process.extract_local_orientation_modifiedRT_3D_parallel('img_hil', radius, theta, distances_to_front);
-toc;
+fsvector      = [250 250 250 250 250 250] * 1e6;
+windowsvector = {...
+    [234 633 126 525 1 1400], ...
+    [56 455 87 486 1 1500], ...
+    [56 455 87 486 1 1500], ...
+    [56 455 87 486 1 1400], ...
+    ... [22 421 95 494 1 1400], ...
+    [33 432 81 480 1 1400]};
 
 %%
-% demonstrate the 3D orientaion
-% show slice
-xslice = 60 / process.fx * 1e3;
-yslice = 60 / process.fy * 1e3;
-zslice = [];
-process.show_inplane_direction_3D(xslice, yslice, zslice);
-process.show_inplane_direction_3D_modifyRT(xslice, yslice, zslice);
 
-%% save and load part 'ID'
-% extract the 1D angular map along the depth for each point by Gabor filter
-wavelength = 6:3:30;
-orientation = 1:1:180;
-distances_to_front = 0:0.01:3.7; % us
-foldname = ['F:\Xiayang\results\'...
-    , Filename1(1:end - 5), '_ID'];
-process.extract_local_ID_AlongDepth_LG('img_hil', wavelength, orientation, distances_to_front, foldname);
-% read the .txt ID files
-S = dir(fullfile(foldname, '*.txt'));
-for ii = 1:numel(S)
-    fileID = [foldname, '\', S(ii).name];
-    M = dlmread(fileID, '\n');
-    lgrow = M(1);
-    lgcol = M(2);
-    lentotal = lgrow * lgcol + 2;
-    ID = NaN(floor(length(M) / lentotal), lgrow, lgcol);
-    Angular_distribute = NaN(floor(length(M) / lentotal), lgcol);
-    k = 1;
-    while  lentotal * k + 1 <= length(M)
-        ID_k = reshape(M(4 + lentotal * (k - 1) : lentotal * k + 1), [lgrow, lgcol]);
-        ID(k, :, :) = ID_k;
-        % sum up to form the 1D angular distribution
-%         Angular_distribute(k, :) = max(ID_k, [], 1);
-        Angular_distribute(k, :) = sum(ID_k, 1);
-        k = k + 1;
+for i = 1:1
+    %%
+    %     i = 5;
+    filename = filevector{i};
+
+    %% Define the class
+    % read the preprocessed .mat
+    % [Filename1,Pathname1] = uigetfile({'*.mat'}, 'select the file');
+    % filename = strcat(Pathname1, Filename1);
+    process = class_process_RFdata(filename);
+
+    % % read the settings
+    % [Filename1,Pathname1]=uigetfile({'*.xlsx'}, 'select the file');
+    % settinig_file = strcat(Pathname1, Filename1);
+    % process = process.loadSettings(settinig_file);
+
+    % read the data from the struct, or reset the dataset
+    process = process.read_origin_data;
+    % process = process.read_data; % read (reset) the dataset
+
+    process.fx = 1 / 0.05e-3;
+    process.fy = 1 / 0.05e-3;
+    % process.fs = 250e6; % 50 MHz 25 MHz 15 MHz
+    % process.fs = 125e6; % 7.5 MHz 5 MHz 2.5 MHz
+    process.fs = fsvector(i);
+
+    % define the index to select Ascan
+    x = 10;
+    y = 10;
+
+    %% show A scan
+    %     x   = 150;
+    %     y   = 150;
+    %
+    %     [Ascan, t_space, fss] = process.demo_Ascan(x, y, strcat('A_scan_', 'x'));
+
+    %% window
+    % window   = [234 633 126 525 1 1400]; % for 20220705_2-ceh105-24-p5_v390_25db_PE.mat
+    % window   = [33 432 116 515 1 1400]; % for 20220705_2-ceh105-24-p5_v324_20db_PE.mat
+    % window   = [54 453 110 509 1 1400]; % for 20220705_2-ceh105-24-p5_v313_26db_PE
+    % window   = [22 421 95 494 1 1400]; % for 20220705_2-ceh105-24-p5_v320_17db_1_PE
+    % window   = [22 421 95 494 1 1400]; % for 20220705_2-ceh105-24-p5_v306_21db_PE.mat
+    % window   = [23 422 100 499 1 1400]; % for 20220705_2-ceh105-24-p5_h5m_5db_PE.mat
+    window   = windowsvector{i};
+    x_step   = 1;
+    y_step   = 1;
+    process = process.cut_edges(window, x_step, y_step);
+    process.show_img_shape;
+
+    %% autocorrelation
+    %     PropertyName = 'img_hil';
+    %     process = process.caculate_autocorr(PropertyName);
+    %
+    %     orthosliceViewer(abs(process.img_autoc), 'Colormap', jet);
+
+    %% normal time window
+    PropertyName = 'img_hil';
+    % PropertyName = 'img_hil_filter';
+    delay       = 700;
+    max_len     = 1400;
+    flag        = 0;
+    front_I_max = 500;
+    process     = process.find_damage_timewin_asignsurface(PropertyName, max_len, flag, delay, front_I_max, 1);
+    %     process.show_surfaces('surface');
+    %% align the front surfaces
+    %     delay_I      = 100;
+    %     % PropertyName = 'img_hil';
+    %     % PropertyName = 'img';
+    %     process     = process.align_front_surface(delay_I, PropertyName);
+    %
+    %     process.rear_I = process.front_I + 3.8e-6 * process.fs; % 3.8 us;
+    % %     back surface
+    %     process3     = process3.align_rear_surface(delay_I, PropertyName);
+
+    %% save space
+    %     process.img     = [];
+    %     process.img_hil = [];
+    %     process.data    = [];
+
+    %     %% surface calculatio - for autocorrelation
+    %     [lx, ly, ~]       = size(process.img_autoc);
+    %     process.front_I   = ones(lx, ly);
+    process.rear_I    = process.front_I + 3.72e-6 * process.fs; % 3.8 us;
+    process.show_surfaces('surface');
+    %% averaging testing; one-plane EDA
+    % define the C_scan_inam as well
+    % PropertyName = 'img_WienerDeconv';
+    % PropertyName = 'img_hil_filter';
+    %     PropertyName  = 'img_hil';
+    % %     PropertyName  = 'img_autoc';
+    %     angle_compens = -15;
+    %     % ***  ply 1
+    %     % ratio = 0.5 / 24;
+    %     % ratio = (0:0.05:1) / 24;
+    %     % *** ply 22
+    %     ratio = 21.5 / 24;
+    %     %
+    %     process = process.define_parallel_inamCscan...
+    %         (ratio, PropertyName);
+    %     imagename = 'C_scan_inam';
+    %     % % Radontransform
+    % %     theta       = 1:1:180;
+    % %     radiis      = 10;
+    % %     process    = process.compute_orientation_by_RT_correct(radiis, theta, imagename);
+    % %     process.show_orientation_by_ID_RT(radiis, theta, imagename, angle_compens);
+    %     % 2d log-Gabor fitler
+    %     wavelength  = (4:2:16);
+    %     orientation = 1:1:180;
+    %     SFB         = 1; % [0.5 2.5]
+    %     SAR         = 0.5; % [0.23 0.92]
+    %     % imagename = 'C_scan_inam_denoise';
+    %     % process3  = process3.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
+    %     % process3.show_orientation_by_ID_allwl(wavelength, orientation, K);
+    %     process    = process.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
+    %     % K: controls how much smoothing is applied to the Gabor magnitude responses.
+    %     K = 1e0;
+    %     process.show_orientation_by_ID_allwl(wavelength, orientation, K, imagename, angle_compens);
+
+    %% 'distance to front and rear' in-plane orientation extraction
+    % 2D log-Gabor filter
+    %     PropertyName  = 'img_autoc';
+    PropertyName  = 'img_hil';
+    %     % RT
+    %     radius        = 10;
+    %     theta         = 1:1:180; % degree
+    %     ratio         = 0/24:0.1/24:24/24;
+    %     sigma_denoise = 0;
+    %     yslice        = 50 / process.fy * 1e3;
+    %     zslice        = []; % us
+    %     tic;
+    %     process       = process.extract_local_orientation_RT_3D_parallel(...
+    %         PropertyName, radius, theta, ratio, sigma_denoise);
+    %     toc;
+    %     % show slice
+    %     xslice        = 50 / process.fx * 1e3;
+    %     angle_compens = -14;
+    %     process.show_inplane_direction_3D(xslice, yslice, zslice, angle_compens);
+
+    % ID
+    wavelength  = (4:2:16) * 2.5 * 2;
+    orientation = 1:1:180;
+    ratio       = 0/24:0.1/24:24/24;
+    K           = 1e0;
+    % sigma              = 5e-4;
+    sigma       = 0;
+    tic;
+    process     = process.extract_local_orientation_3D_parallel_allwl(...
+        PropertyName, wavelength, orientation, ratio, K, sigma);
+    toc;
+
+    % show slice
+    xslice        = 200 / process.fx * 1e3;
+    yslice        = 200 / process.fy * 1e3;
+    zslice        = [];
+    mfsize        = [1 1 1];
+    angle_compens = -25;
+    process.show_inplane_direction_3D_ID(xslice, yslice, zslice, mfsize, angle_compens);
+
+    %% ************** calculate the mean fiber angle and its standard deviation *************
+    %     % need the reference angle to calcualate the mean and std!
+    process.statistic_angular_distribution(angle_compens);
+
+    %% save data
+    Filename1  = strsplit(filename, '\');
+    Filename1  = Filename1{end};
+    FolderName = "F:\Xiayang\results\DifferentTech_fiberorientation\comparison\";   % the destination folder
+    save(strcat(FolderName, Filename1(1:end-4), 'mat'), '-v7.3');
+
+    %% save all figures
+    FolderName = "F:\Xiayang\results\DifferentTech_fiberorientation\comparison\";   % the destination folder
+    FolderName = strcat(FolderName, Filename1(1:end-4));
+    mkdir(FolderName);
+    FigList = findobj(allchild(0), 'flat', 'Type', 'figure');
+    for iFig = 1:length(FigList)
+        FigHandle = FigList(iFig);
+        FigName   = get(FigHandle, 'Name');
+        disp(fullfile(FolderName, FigName));
+        set(0, 'CurrentFigure', FigHandle);
+        saveas(gcf, strcat(FolderName, '\', FigName), 'bmp');
+        saveas(gcf, strcat(FolderName, '\', FigName), 'fig');
     end
-    % Derivative the 1D angular distribution
-%     [Gx, Gy] = imgradientxy(Angular_distribute, 'sobel');
-%     Gx_norm1 = normalize(Gx, 1);
-%     Gx_norm2 = normalize(Gx, 2);
-%     [Gx, Gy, Gz] = imgradientxyz(ID, 'sobel');
-%     [Gmag,Gazimuth,Gelevation] = imgradient3(Gx,Gy,Gz);
-    % 2D B mode display
-%     figure('Name','sum_Gmag_2');
-%     surf(squeeze(sum(Gmag, 2)));
-%     figure('Name','sum_Gmag_2');
-%     surf(squeeze(max(Gmag, [], 2)));
-%     %
-%     figure('Name','sum_Gz_2');
-%     surf(squeeze(sum(Gz, 2)));  
-%     figure('Name','max_Gz_2');
-%     surf(squeeze(max(Gz, [], 2)));
-%     figure('Name','sum_ID_2');
-%     surf(squeeze(sum(ID, 2)));
-%     figure('Name','max_ID_2');
-%     surf(squeeze(max(ID, [], 2)));
-%     colormap jet;
-%     disp(ii);
+    close all
 end
 
-%%
-% Gabor fitler
-wavelength  = 6:3:30;
-orientation = 1:1:180;
-% process = process.show_logGabor_filter('img_hil_filter', wavelength, orientation);
-K           = 0.1;
-process     = process.compute_logGabor_filter_withoutFig('img_hil', wavelength, orientation, K);
-process.show_ID_logGabor_filter(95, 95, wavelength, orientation); % y, x
-process.show_orientation_by_ID_allwl(wavelength, orientation);
-process.show_orientation_by_ID_allwl_kurtosis(wavelength, orientation);
-% check diff. wavelength
-% for wl_idx = 1:length(wavelength)
-%     process.show_orientation_by_ID_onewl(wl_idx, wavelength, orientation);
+
+% %%  ************************************ visualization part
+% close all;
+% clc;
+% 
+% % show A scan
+% x   = 100;
+% y   = 100;
+% [Ascan, t_space, fss] = process.demo_Ascan(x, y, strcat('A_scan_', 'x'));
+% xlim([0.5 5.5]);
+% 
+% % show C-scan slice
+% PropertyName = 'img_hil';
+% for ratio = [2.5 6.5 10.5] / 24
+%     [~, C_scan_inam_temp, ~] = process.define_parallel_inamCscan(ratio, PropertyName);
+%     x  = (1:size(C_scan_inam_temp, 1))/process.fx*1e3;
+%     y  = (1:size(C_scan_inam_temp, 2))/process.fy*1e3;
+%     figure, pcolor(x, y, C_scan_inam_temp);
+%     shading flat;
+%     colormap("jet");
+%     colorbar;
+%     set(gca, 'fontsize', 16);
+%     set(gca, 'linewidth', 1.5);
+% %     clim([0 0.12]);
+%     if ratio ~= 10.5 / 24
+%         axis off;
+%     end
 % end
-
-% extract 3D inplane angles by parallel Cscans
-distances_to_front = 0:0.01:3.7; % us
-tic;
-process = process.extract_local_orientation_3D_parallel_allwl('img_hil', wavelength, orientation, distances_to_front);
-toc;
-
-% show slice
-xslice = 60 / process.fx * 1e3;
-yslice = 60 / process.fy * 1e3;
-zslice = [];
-process.show_inplane_direction_3D_LG(xslice, yslice, zslice);
-
-% extract 3D inplane angles by Cscans following the unwrapped phase. 
-% not yet correct
-% process = process.extract_local_orientation_3D_byuwp_allwl('img_hil', wavelength, orientation, distances_to_front);
-
-%% save object
-FolderName = "F:\Xiayang\results\";   % the destination folder;
-savename = strcat(FolderName, Filename1(1:end-5), '_3D_orientation.mat');
-process.save_local_orientaion_3D(savename);
-
-%% read the ID .txt
-[Filename1,Pathname1] = uigetfile({'*.txt'}, 'select the file');
-filename = strcat(Pathname1, Filename1);
-fprintf(filename,'%6f \r\n', A);
-
-%% save all figures
-FolderName = "F:\Xiayang\results";   % the destination folder
-FigList = findobj(allchild(0), 'flat', 'Type', 'figure');
-for iFig = 1:length(FigList)
-  FigHandle = FigList(iFig);
-  FigName   = get(FigHandle, 'Name');
-  disp(fullfile(FolderName, FigName));
-  set(0, 'CurrentFigure', FigHandle);
-  saveas(gcf, strcat(FolderName, '\', FigName), 'bmp');
-  saveas(gcf, strcat(FolderName, '\', FigName), 'fig');
-end
-
-%% save all figures
-FolderName = "C:\Users\xiayang\OneDrive - UGent\matlab_work\process_RFcleaneddata\results";   % the destination folder
-FigList = findobj(allchild(0), 'flat', 'Type', 'figure');
-for iFig = 1:length(FigList)
-  FigHandle = FigList(iFig);
-  FigName   = get(FigHandle, 'Name');
-  disp(fullfile(FolderName, FigName));
-  set(0, 'CurrentFigure', FigHandle);
-  saveas(gcf, strcat(FolderName, '\', FigName), 'epsc');
-  saveas(gcf, strcat(FolderName, '\', FigName), 'pdf');
-  saveas(gcf, strcat(FolderName, '\', FigName), 'fig');
-end
-% saveas(gcf,'Barchart','epsc')
+% 
+% %%
+% % show 2D orientation slice
+% PropertyName = 'Inplane_direction_3D_ID';
+% wl = max(wavelength);
+% for ratio = [2.5 6.5 10.5] / 24
+%     [~, C_scan_inam_temp, ~] = process.define_parallel_inamCscan(ratio, PropertyName);
+%     x  = (1:size(C_scan_inam_temp, 1))/process.fx*1e3;
+%     y  = (1:size(C_scan_inam_temp, 2))/process.fy*1e3;
+%     C_scan_inam_temp = C_scan_inam_temp + angle_compens;
+%     % remove the edges
+%     C_scan_inam_temp(1:max(wl)/2+1, :) = NaN;
+%     C_scan_inam_temp(:, 1:max(wl)/2+1) = NaN;
+%     C_scan_inam_temp(end-max(wl)/2:end, :) = NaN;
+%     C_scan_inam_temp(:, end-max(wl)/2:end) = NaN;
+%     figure, pcolor(x, y, C_scan_inam_temp);
+%     shading flat;
+%     colormap("hsv");
+%     colorbar;
+%     clim([-90 90]);
+%     set(gca, 'fontsize', 16);
+%     set(gca, 'linewidth', 1.5);
+%     if ratio ~= 10.5 / 24
+%         axis off;
+%     end
+%     med  = median(C_scan_inam_temp(max(wl)/2+2:end-max(wl)/2-1,...
+%         max(wl)/2+2:end-max(wl)/2-1),'all');
+%     medd = mad(C_scan_inam_temp(max(wl)/2+2:end-max(wl)/2-1,...
+%         max(wl)/2+2:end-max(wl)/2-1), 1, 'all');
+%     disp([num2str(med) '+' num2str(medd)]);
+% end
+% 
+% %% 3D display
+% 
+% % show slice
+% xslice        = 100 / process.fx * 1e3;
+% yslice        = 100 / process.fy * 1e3;
+% zslice        = [];
+% mfsize        = [1 1 1];
+% angle_compens = -25;
+% process.show_inplane_direction_3D_ID(xslice, yslice, zslice, mfsize, angle_compens);
+% 
+% zlim([1 5.5]);
+% 
+% %% ************** calculate the mean fiber angle and its standard deviation *************
+% %     % need the reference angle to calcualate the mean and std!
+% process.statistic_angular_distribution(angle_compens);
+% 
+% ylim([1 5.5]);
+% clim([0 0.5]);

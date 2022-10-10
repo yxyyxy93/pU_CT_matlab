@@ -1371,6 +1371,9 @@ classdef class_process_woven_RFdata < class_process_RFdata
                 else
                     C_scan_inam_para_denoise = fx_curvelet_denoise_enhanced(sigma_denoise, C_scan_inam_para);
                 end
+                % add a denosier
+%                 C_scan_inam_para_denoise = TVL1denoise(C_scan_inam_para_denoise, 1, 100);
+
                 % ***************************
                 [X_mesh, Y_mesh] = meshgrid(-mask_size: mask_size, -mask_size: mask_size);
                 kernel_1_f = fx_2DHilbertKernel_1st(X_mesh, Y_mesh, s_f);
@@ -1414,6 +1417,7 @@ classdef class_process_woven_RFdata < class_process_RFdata
                 orien = orien(floor(m): end-round(m), floor(n): end-round(n));
                 ampli = ampli(floor(m): end-round(m), floor(n): end-round(n));
                 apexa = apexa(floor(m): end-round(m), floor(n): end-round(n));  
+                % Morphological manipulation
                 se = strel('disk', 1);
                 apexa = imopen(apexa, se);
                 % search for the orientation
@@ -1446,6 +1450,79 @@ classdef class_process_woven_RFdata < class_process_RFdata
                 disp([num2str(ratios(i)), '/', num2str(ratios(end))]);
             end
             obj.Inplane_direction_3D_ID         = Inplane_direction;
+        end
+        
+        % ******************** 2D structure tensor
+         function obj = structural_tensor_2D(obj, sigma1, sigma2, PropertyName)
+            % apply structural tensor on the cleaned inph dataset
+            % explanation about the angles:
+            % anglex, y, z represent the angles with the axis directional vector of the planar like structure.
+            % extract the angles of the the plane-structrual
+            % sigma1: smoothing scale
+            % sigma2: integration scale
+            % PropertyName: 'img_hil' or 'img_hil_filter' ...
+            % ***
+            % time record
+            tic;
+            disp("start forming the ST");
+            % The sequence is changed unexpectedly. Transverse the matrix
+            img = single(abs(obj.(PropertyName)));   
+            % 2D DOG Gaussian filter
+            nfft2 = size(img);
+            sigma_gaus1 = 12;
+            sigma_gaus2 = 15;
+            gmap1 = single(fspecial('gaussian', nfft2, sigma_gaus1));
+            gmap2 = single(fspecial('gaussian', nfft2, sigma_gaus2));
+            hFilter  = gmap2 - gmap1; % sigma_gaus2 > sigma_gaus1
+            % Gx filter
+            gLeft    = [hFilter, zeros(nfft2(1),1)];
+            gRight   = [zeros(nfft2(1),1), hFilter];
+            gDiff_Gx = gLeft - gRight;
+            gDiff_Gx = gDiff_Gx(:,1:nfft2(2));
+            % Gy filter
+            gTop     = [hFilter; zeros(1, nfft2(2))];
+            gBot     = [zeros(1, nfft2(2)); hFilter];
+            gDiff_Gy = gTop - gBot;
+            gDiff_Gy = gDiff_Gy(1:nfft2(1), :);
+
+            % calculation of gradients
+            Gx = ifftshift( ifft2( fft2(img) .* fft2(gDiff_Gx) ) );
+            Gy = ifftshift( ifft2( fft2(img) .* fft2(gDiff_Gy) ) );
+
+            % release the memory
+            clear gLeft;
+            clear gRight;
+            % form the structure-tenso
+            [lx, ly] = size(Gx);
+            ST = single(zeros(lx, ly, 2,2));
+            ST(:, :, 1, 1) = Gx .* Gx;
+            Gxy = Gx .* Gy;
+            ST(:, :, 2, 1) = Gxy;
+            ST(:, :, 1, 2) = Gxy;
+            ST(:, :, 2, 2) = Gy .* Gy;
+            disp("ST formed");
+            timeElapsed = toc;
+            disp(['form_tensor: ', num2str(timeElapsed)]);
+            % decomposite structure tensor
+            c_p    = single(nan(lx, ly));
+            for i=1:lx
+                for j=1:ly
+                    matrix = squeeze(ST(i, j, :, :));
+                    [vector, d_d] = eig(matrix);
+                    % Extract the eigenvalues from the diagonal, then sort the resulting vector in ascending order. The second output from sort returns a permutation vector of indices.
+                    [d, ind]      = sort(diag(d_d));
+                    c_p(i, j) = ( (d(1) - d(2))/ (d(1) + d(2)) )^2;
+                end
+            end
+            imagesc(c_p);
+%             % release the memory
+%             clear Gx;
+%             clear Gy;
+%             clear Gz;
+%             clear img;
+%             clear img_deconv;
+%             clear data;
+%             clear inam;
         end
         
         % ********************* 3D ID ********************
@@ -2058,17 +2135,17 @@ classdef class_process_woven_RFdata < class_process_RFdata
             Xd     = (1: m) / obj.fx * 1e3;
             Yd     = (1: n) / obj.fy * 1e3;
             cf = figure('Name', ['defect_amplitduedrop', '_', num2str(drop)]);
-            set(cf, 'Position', [-200, -200, 600, 800], 'color', 'white');
+            set(cf, 'Position', [-200, -200, 600, 500], 'color', 'white');
             ax     = subplot(1, 1, 1);
             imagesc(ax, Yd, Xd, amp_max_filter);
-            axis image;
+%             axis image;
             colormap(ax, jet);
             hold on;
             h = colorbar;
             set(get(h, 'Title'), 'string', '\fontname {times new roman} Amp. (arb.)');
             xlabel('\fontname {times new roman} X displacement (mm) ');
             ylabel('\fontname {times new roman} Y displacement (mm)');
-            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 12);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 14);
             set(ax, 'linewidth', 2);
             % *** ground truth
             % Morphological compute
@@ -2076,16 +2153,18 @@ classdef class_process_woven_RFdata < class_process_RFdata
 %             groudtruth = imclose(groudtruth, se);
             groudtruth = imdilate(groudtruth, se);
             %
-            ax     = subplot(1, 2, 2);
+            cf = figure('Name', ['defect_binary', '_', num2str(drop)]);
+            set(cf, 'Position', [-200, -200, 600, 500], 'color', 'white');
+            ax     = subplot(1, 1, 1);
             imagesc(ax, Yd, Xd, groudtruth);
-            axis image;
+%             axis image;
             colormap(ax, gray);
             hold on;
             h = colorbar;
             set(get(h, 'Title'), 'string', '\fontname {times new roman} Truth of defect');
             xlabel('\fontname {times new roman} X displacement (mm) ');
             ylabel('\fontname {times new roman} Y displacement (mm)');
-            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 12);
+            set(ax, 'Fontname', 'times new Roman', 'Fontsize', 14);
             set(ax, 'linewidth', 2);
             % 
             obj.ground_truth_depth = groudtruth;

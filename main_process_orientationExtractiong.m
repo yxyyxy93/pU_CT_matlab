@@ -12,13 +12,20 @@ clear;
 filename               = strcat(Pathname1, Filename1);
 process3               = class_process_RFdata(filename);
 
-% read the settings
-[Filename1, Pathname1] = uigetfile({'*.xlsx'}, 'select the file');
-settinig_file          = strcat(Pathname1, Filename1);
+% % read the settings
+% [Filename1, Pathname1] = uigetfile({'*.xlsx'}, 'select the file');
+% settinig_file          = strcat(Pathname1, Filename1);
+% 
+% % read the data from the struct, or reset the dataset
+% process3               = process3.loadSettings(settinig_file);
 
-% read the data from the struct, or reset the dataset
-process3               = process3.loadSettings(settinig_file);
-process3               = process3.read_origin_data; % read (reset) the dataset
+process3.fx = 1 / 0.05e-3;
+process3.fy = 1 / 0.05e-3;
+% process.fs = 250e6; % 50 MHz 25 MHz 15 MHz
+% process.fs = 125e6; % 7.5 MHz 5 MHz 2.5 MHz
+process3.fs = 250e6;
+
+process3   = process3.read_origin_data; % read (reset) the dataset
 
 
 %% window cutting
@@ -31,33 +38,23 @@ y_step   = 1;
 process3 = process3.cut_edges(window, x_step, y_step);
 process3.show_img_shape;
 
-% 
-%% surface calculation
-% x: x index
-% y: y index
-% MinPD: MinPeakDistance for findpeaks
-% MinPH: MinPeakHeight for findpeaks
-MinPD        = 800;
-MinPH        = 0.02;  % these 2 parameters need to be changed for surface estimation.
-% PropertyName = 'img_WienerDeconv'; bh
-PropertyName = 'img_hil';
-process3.show_Ascan_inam_peaks(153, 153, MinPD, MinPH, PropertyName); % x, y
-% surface calculation
-max_len                = 1400;
-threshold_delamination = 0.3;
-process3               = process3.find_front_amp(...
-    MinPD, MinPH, PropertyName, max_len, threshold_delamination);
-filename_fig           = filename;
-% process3.show_surfaces(filename_fig(1:end-5));
 %
-process3.smooth_rear_I;
-process3.show_surfaces(filename_fig(1:end-5));
+%% surface calculation
+% normal time window
+PropertyName = 'img_hil';
+% PropertyName = 'img_hil_filter';
+delay        = 600;
+max_len      = 1400;
+flag         = 0;
+front_I_max  = 400;
+process3     = process3.find_damage_timewin_asignsurface(PropertyName, max_len, flag, delay, front_I_max, 1);
+process3.show_surfaces(filename(1:end-5));
 
-% %
-% load TOF.mat;
-% process2.rear_I = process2.front_I + mean(TOF_walls);
-% % tackle the problem of walls determination
-% process2.show_surfaces;
+%% align the front surfaces
+delay_I      = 100;
+% PropertyName = 'img_hil';
+% PropertyName = 'img';
+process3     = process3.align_front_surface(delay_I, PropertyName);
 
 %% original results display
 % xslice = 10 / process3.fx * 1e3;
@@ -66,6 +63,7 @@ process3.show_surfaces(filename_fig(1:end-5));
 % process3.show_inaminph_3D(xslice, yslice, zslice);
 
 %% averaging testing; one-plane EDA
+close all;
 
 % define the C_scan_inam as well
 % PropertyName = 'img_WienerDeconv';
@@ -77,7 +75,7 @@ angle_compens = -7;
 % ratio = (0:0.05:1) / 24;
 % *** ply 22
 % ratio = 21.5 / 24;
-ratio = (21.2:0.05:21.8) / 24;
+ratio = (20.2:0.05:20.8) / 24;
 %
 process3    = process3.define_parallel_inamCscan...
     (ratio, PropertyName);
@@ -88,7 +86,7 @@ imagename     = 'C_scan_inam';
 % process3    = process3.compute_orientation_by_RT_correct(radiis, theta, imagename);
 % process3.show_orientation_by_ID_RT(radiis, theta, imagename, angle_compens);
 % 2d log-Gabor fitler
-wavelength  = 4:2:20;
+wavelength  = (4:2:20) * 4;
 orientation = 1:1:180;
 SFB         = 1; % [0.5 2.5]
 SAR         = 0.7; % [0.23 0.92]
@@ -121,7 +119,7 @@ angle_compens = 0;
 process3.show_inplane_direction_3D(xslice, yslice, zslice, angle_compens);
 
 % 2D log-Gabor filter
-wavelength         = 4:2:20;
+wavelength         = (4:2:20)*4;
 orientation        = 1:1:180;
 ratio              = 0/24:0.1/24:24/24;
 K                  = 0.5e0;
@@ -142,6 +140,7 @@ process3.show_inplane_direction_3D_ID(xslice, yslice, zslice, mfsize, angle_comp
 %% ************** calculate the mean fiber angle and its standard deviation *************
 % need the reference angle to calcualate the mean and std!
 
+process3.statistic_angular_distribution(angle_compens);
 Stacking_sequence = [
     45 0 -45 -90 ...
     45 0 -45 -90 ...
