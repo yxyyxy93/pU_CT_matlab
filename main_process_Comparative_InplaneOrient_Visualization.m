@@ -4,23 +4,6 @@ close all;
 fclose all;
 clear;
 
-filevector = {'F:\Xiayang\2-ceh105-24-p5\v390\20220705_2-ceh105-24-p5_v390_25db_PE.mat', ...
-    'F:\Xiayang\2-ceh105-24-p5\v324\20220825_2-ceh105-24-p5_v324_22db_PE.mat', ...
-    'F:\Xiayang\2-ceh105-24-p5\v313\20220825_2-ceh105-24-p5_v313_23db_PE.mat', ...
-    'F:\Xiayang\2-ceh105-24-p5\v320\20220825_2-ceh105-24-p5_v320_17db_PE.mat', ...
-    ... 'F:\Xiayang\2-ceh105-24-p5\v306\20220705_2-ceh105-24-p5_v306_21db_PE.mat', ...
-    'F:\Xiayang\2-ceh105-24-p5\geh5m\20220825_2-ceh105-24-p5_h5m_8db_PE.mat'};
-
-fsvector      = [250 250 250 250 250 250] * 1e6;
-windowsvector = {...
-    [234 633 126 525 1 1400], ...
-    [56 455 87 486 1 1500], ...
-    [56 455 87 486 1 1500], ...
-    [56 455 87 486 1 1400], ...
-    ... [22 421 95 494 1 1400], ...
-    [33 432 81 480 1 1400]};
-process.show_surfaces('surface');
-
 %%  ************************************ visualization part
 
 close all;
@@ -61,7 +44,7 @@ for ratio = [6.5 13.5 17.5 21.5] / 24
     colorbar;
     set(gca, 'fontsize', 16);
     set(gca, 'linewidth', 1.5);
-    clim([0 0.06]);
+%     clim([0 0.06]);
     if ratio ~= 21.5 / 24
         axis off;
     end
@@ -76,9 +59,13 @@ for ratio = [6.5 13.5 17.5 21.5] / 24
 end
 
 %%
+close all;
+
+FolderName = 'C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Different_freq_orientation\';
+
 % show 2D orientation slice
 PropertyName = 'Inplane_direction_3D_ID';
-% angle_compens = -21; % for 50 MHz
+% angle_compens = -22; % for 50 MHz
 angle_compens = -25;
 wl = max(wavelength);
 
@@ -101,7 +88,7 @@ for ratio = [6.5 13.5 17.5 21.5] / 24
     shading flat;
     colormap("hsv");
 %     colorbar;
-    clim([-90 90]);
+    caxis([-90 90]); % below R2022a
     set(gca, 'fontsize', 16);
     set(gca, 'linewidth', 1.5);
     hold on;
@@ -119,15 +106,14 @@ for ratio = [6.5 13.5 17.5 21.5] / 24
 %         max(wl)/2+2:end-max(wl)/2-1), 1, 'all', 'omitnan');
 
     % the gated mean and std
-
     % the ratio of the leakage area
     bound_l = -68;
     bound_h = -22;
     C_scan_inam_temp_inarea = C_scan_inam_temp(C_scan_inam_temp>bound_l & C_scan_inam_temp<bound_h);
-    inarea_ratio = size(C_scan_inam_temp_inarea) / size(C_scan_inam_temp(~isnan(C_scan_inam_temp)));
+    inarea_ratio = size(C_scan_inam_temp_inarea) / size(C_scan_inam_temp(:));
 
     inarea_mean = mean(C_scan_inam_temp_inarea, 'omitnan');
-    inarea_std  = std(C_scan_inam_temp_inarea, 'omitnan');
+    inarea_std  = std(C_scan_inam_temp_inarea, 1, 'omitnan');
 
     % save the metrics
     cnt = cnt + 1;
@@ -152,8 +138,12 @@ disp(metrics_val);
 % write to csv
 T = array2table(metrics_val, "VariableNames", names, "RowNames", {'7', '14', '18', '22'});
 
+if ~exist('SNR','var')
+    SNR = 100;
+end
+
 writetable(T, strcat(FolderName, Filename1(1:end-4), '\Matrics', ...
-    '_', num2str(x_step), '_', num2str(SNR), '.csv'));
+    '_', num2str(x_step), '_', num2str(SNR), '_', num2str(process.fs/1e6), '.csv'));
 
 %% 3D display
 
@@ -181,127 +171,56 @@ ylim([1 5.5]);
 
 %% read all matrics and plot
 close all;
+% 
+% % Get a list of all files in the folder, and its subfolders
+% S = dir(fullfile(FolderName, '*'));
+% N = setdiff({S([S.isdir]).name},{'.','..'}); % list of subfolders of D.
+% 
+% % bar plot elements
+% mean_val = nan(4, 4);
+% std_val = nan(4, 4);
+% ratio = nan(4, 4);
+% k = 0;
+% 
+% for ii = 1:numel(N)
+%     disp(ii);
+%     T = dir(fullfile(FolderName, N{ii}, '*.csv')); % improve by specifying the file extension.
+%     if isempty(T)
+%         continue;
+%     else
+%         k = k + 1;
+%         disp(N{ii})
+%     end
+%     T = readtable(fullfile(T.folder, T.name));
+%     mean_val(:, k) = T.Inarea_mean;
+%     std_val(:, k) = T.Inarea_std;
+%     ratio(:, k) = T.Inarea_ratio;
+% end
 
-% Get a list of all files in the folder, and its subfolders
-S = dir(fullfile(FolderName, '*'));
-N = setdiff({S([S.isdir]).name},{'.','..'}); % list of subfolders of D.
+FolderName = ['C:\Users\xiayang\OneDrive - UGent\matlab_work\results\' ...
+, 'Different_freq_orientation\dif_freq_matrics'];
+
+
+S = dir(fullfile(FolderName, '*.csv'));
 
 % bar plot elements
-mean_val = nan(4, 4);
-std_val = nan(4, 4);
-ratio = nan(4, 4);
-k = 0;
-
-for ii = 1:numel(N)
-    disp(ii);
-    T = dir(fullfile(FolderName, N{ii}, '*.csv')); % improve by specifying the file extension.
-    if isempty(T)
-        continue;
-    else
-        k = k + 1;
-        disp(N{ii})
-    end
-    T = readtable(fullfile(T.folder, T.name));
-    mean_val(:, k) = T.Inarea_mean;
-    std_val(:, k) = T.Inarea_std;
-    ratio(:, k) = T.Inarea_ratio;
-end
-
-%  ************* plot the errorbar for plies
-cf = figure('Name', '');
-set(cf, 'Position', [0, 0, 1200, 600], 'color', 'white');
-x = [1, 2, 3, 4]*6;
-errorbar(x,   mean_val(:, 1), std_val(:, 1), ... 
-    's', 'MarkerSize', 10, 'CapSize', 10, 'color', 'red', 'display', '50 MHz'); 
-hold on;
-errorbar(x+1, mean_val(:, 4), std_val(:, 4), ...
-    'd', 'MarkerSize',10, 'CapSize', 10, 'color', 'green', 'display', '25 MHz'); 
-hold on;
-errorbar(x+2, mean_val(:, 3), std_val(:, 3), ...
-    'o', 'MarkerSize',10, 'CapSize', 10, 'color', 'blue', 'display', '15 MHz'); 
-hold on;
-errorbar(x+3, mean_val(:, 2), std_val(:, 2), ...
-    '*', 'MarkerSize',10, 'CapSize', 10, 'color', 'magenta', 'display', '5 MHz'); 
-hold on;
-ylim([-90 -22.5]);
-legend;
-set(gca, 'fontname', 'Times new roman');
-set(gca, 'fontsize', 16);
-set(gca, 'linewidth', 1.5);
-
-% ************* 
-cf = figure('Name', '');
-set(cf, 'Position', [0, 0, 1200, 300], 'color', 'white');
-ratio_str = strcat(string(round(ratio*100, 1)), '%');
-% h = bar([x', x'+1, x'+2, x'+3],  ratio, 0.8); 
-% set(h, 'FaceAlpha', 0.3); 
-h=bar(x,  ratio(:, 1), 0.12, 'red');
-set(h, 'FaceAlpha', 0.2); 
-hold on;
-text(x, ratio(:, 1), ratio_str(:, 1), 'vert','bottom','horiz','center' ...
-    , 'fontname', 'Times new roman', 'fontsize', 12); 
-box off;
-
-h=bar(x+1,  ratio(:, 4), 0.12, 'green');
-set(h, 'FaceAlpha', 0.2); 
-hold on;
-text(x+1, ratio(:, 4), ratio_str(:, 4),'vert','bottom','horiz','center' ...
-    , 'fontname', 'Times new roman', 'fontsize', 12); 
-box off;
-
-h=bar(x+2,  ratio(:, 3), 0.12, 'blue'); 
-set(h, 'FaceAlpha', 0.2); 
-hold on;
-text(x+2, ratio(:, 3), ratio_str(:, 3), 'vert','bottom','horiz','center' ... 
-    , 'fontname', 'Times new roman', 'fontsize', 12); 
-box off;
-
-h=bar(x+3,  ratio(:, 2), 0.12, 'magenta'); 
-set(h, 'FaceAlpha', 0.2); 
-hold on;
-text(x+3, ratio(:, 2), ratio_str(:, 2),'vert','bottom','horiz','center' ...
-    , 'fontname', 'Times new roman', 'fontsize', 12); 
-box off;
-xlim([5 30]);
-axis off;
-
-
-%% read all matrics and plot - specify the file names
-close all;
-
-foldname = ['F:\Xiayang\results\DifferentTech_fiberorientation\' ...
-    'comparison\20220825_2-ceh105-24-p5_v313_23db_PE'];
-
-% filenames = {'Matrics_2.csv', 
-%     'Matrics_4.csv', 
-%     'Matrics_6.csv', 
-%     'Matrics_8.csv', 
-%     'Matrics_10.csv'};
-
-filenames = {'Matrics_4_35.csv', 
-    'Matrics_4_30.csv', 
-    'Matrics_4_25.csv', 
-    'Matrics_4_20.csv'};
-
-% plot setttings
-% disname = {'0.1 mm', '0.2 mm', '0.3 mm', '0.4 mm', '0.5 mm'};
-disname = {'35 dB', '30 dB', '25 dB', '20 dB'};
-plotshape = {'s', 'd', 'o', '*', 'h'};
-colors = {'red', 'green', 'blue', 'magenta', 'black'};
-% bar plot elements
-num_fn = numel(filenames);
+num_fn = numel(S);
 mean_val = nan(4, num_fn);
 std_val = nan(4, num_fn);
 ratio = nan(4, num_fn);
-k = 0;
-
 for k = 1:num_fn
     disp(k);
-    T = readtable(fullfile(foldname, filenames{k}));
+    T = readtable(fullfile(S(k).folder, S(k).name));
     mean_val(:, k) = T.Inarea_mean;
     std_val(:, k) = T.Inarea_std;
     ratio(:, k) = T.Inarea_ratio;
 end
+
+% plot setttings
+disname = {'50 MHz', '25 MHz', '15 MHz', '5 MHz'};
+
+plotshape = {'s', 'd', 'o', '*', 'h'};
+colors = {'red', 'green', 'blue', 'magenta', 'black'};
 
 %  ************* plot the errorbar for plies
 cf = figure('Name', '');
@@ -335,3 +254,130 @@ end
 
 xlim([5 30]);
 axis off;
+
+%% read all matrics and plot - specify the file names
+close all;
+
+foldname = ['C:\Users\xiayang\OneDrive - UGent\matlab_work\results\' ...
+'Different_freq_orientation\20220825_2-ceh105-24-p5_v313_23db_PE'];
+
+% filenames = {'Matrics_2_100_250.csv', 
+%     'Matrics_4_100_250.csv', 
+%     'Matrics_6_100_250.csv', 
+%     'Matrics_8_100_250.csv', 
+%     'Matrics_10_100_250.csv'};
+
+% filenames = {'Matrics_4_35_250.csv', 
+%     'Matrics_4_30_250.csv', 
+%     'Matrics_4_25_250.csv', 
+%     'Matrics_4_20_250.csv'};
+
+filenames = {
+%     'Matrics_4_100_200.csv', 
+    'Matrics_4_20_150.csv', 
+    'Matrics_4_20_100.csv', 
+    'Matrics_4_20_50.csv',
+    'Matrics_4_20_30.csv'
+    };
+
+% plot setttings
+% disname = {'0.1 mm', '0.2 mm', '0.3 mm', '0.4 mm', '0.5 mm'};
+% disname = {'35 dB', '30 dB', '25 dB', '20 dB'};
+disname = {
+%     '200 MS/s', 
+    '150 MS/s', '100 MS/s', '50 MS/s', '30 MS/s'};
+
+plotshape = {'s', 'd', 'o', '*', 'h'};
+colors = {'red', 'green', 'blue', 'magenta', 'black'};
+% bar plot elements
+num_fn = numel(filenames);
+mean_val = nan(4, num_fn);
+std_val = nan(4, num_fn);
+ratio = nan(4, num_fn);
+k = 0;
+
+for k = 1:num_fn
+    disp(k);
+    T = readtable(fullfile(foldname, filenames{k}));
+    mean_val(:, k) = T.Inarea_mean;
+    std_val(:, k) = T.Inarea_std;
+    ratio(:, k) = T.Inarea_ratio;
+end
+
+%  ************* plot the errorbar for plies
+cf = figure('Name', '');
+set(cf, 'Position', [0, 0, 1200, 600], 'color', 'white');
+x = (1:4)* (num_fn + 2);
+
+for k = 1:num_fn
+    errorbar(x+k,   mean_val(:, k), std_val(:, k), plotshape{k}, ... 
+        'color', colors{k}, 'MarkerSize', 10, 'CapSize', 10, 'display', disname{k}); 
+    hold on;
+end
+% ylim([-90 -22.5]);
+ylim([-70 -30]);
+legend;
+set(gca, 'fontname', 'Times new roman');
+set(gca, 'fontsize', 16);
+set(gca, 'linewidth', 1.5);
+
+% ************* 
+cf = figure('Name', '');
+set(cf, 'Position', [0, 0, 1200, 300], 'color', 'white');
+ratio_str = strcat(string(round(ratio*100, 1)), '%');
+
+for k = 1:num_fn
+    h=bar(x+k,  ratio(:, k), 0.12, colors{k});
+    set(h, 'FaceAlpha', 0.2);
+    hold on;
+    text(x+k, ratio(:, k), ratio_str(:, k), 'vert','bottom','horiz','center' ...
+        , 'fontname', 'Times new roman', 'fontsize', 12);
+    box off;
+end
+
+% xlim([5 35]);
+xlim([5 30]);
+axis off;
+
+
+
+%% test MumfoldShah 
+
+close all;
+clc;
+
+% show C-scan slice
+PropertyName = 'img_hil';
+glabal_max = 0;
+for ratio = [21.5] / 24
+    [~, C_scan_inam_temp, ~] = process.define_parallel_inamCscan(ratio, PropertyName);
+    % 2D GF-ID
+    wavelength  = (4:2:16)*2.5;
+    orientation = 1:1:180;
+    SFB         = 1; % [0.5 2.5]
+    SAR         = 0.5; % [0.23 0.92]
+    imagename = 'C_scan_inam_denoise';
+    process.(imagename) = C_scan_inam_temp;
+    process    = process.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
+    % K: controls how much smoothing is applied to the Gabor magnitude responses.
+    K = 0.5e0;
+    process.show_orientation_by_ID_allwl(wavelength, orientation, K, imagename, angle_compens);
+    
+    % mumfordshah smooth
+    [m, n, k] = size(C_scan_inam_temp); % k = channels, 1 for gray scalar
+    % set parameters
+    alpha = 5;
+    lambda = 0.1;
+    eps = 1e-1;
+    %
+    u_n = fx_mumfordshah(C_scan_inam_temp, alpha, lambda, eps);
+    
+    % 2D GF-ID
+    process.(imagename) = u_n;
+    process    = process.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
+    % K: controls how much smoothing is applied to the Gabor magnitude responses.
+    K = 1e0;
+    process.show_orientation_by_ID_allwl(wavelength, orientation, K, imagename, angle_compens); 
+end
+
+

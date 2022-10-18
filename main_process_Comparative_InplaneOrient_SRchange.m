@@ -31,7 +31,7 @@ filename = filevector{i};
 % filename = strcat(Pathname1, Filename1);
 process = class_process_RFdata(filename);
 
-ds_arr = [2 5 10];
+ds_arr = [250/30];
 
 for ds = ds_arr
 
@@ -40,8 +40,8 @@ for ds = ds_arr
     process = process.read_origin_data;
     % process = process.read_data; % read (reset) the dataset
 
-    process.fx = 1 / (0.05e-3 * step_ratio);
-    process.fy = 1 / (0.05e-3 * step_ratio);
+    process.fx = 1 / 0.05e-3;
+    process.fy = 1 / 0.05e-3;
     % process.fs = 250e6; % 50 MHz 25 MHz 15 MHz
     % process.fs = 125e6; % 7.5 MHz 5 MHz 2.5 MHz
     process.fs = fsvector(i) / ds;
@@ -75,12 +75,13 @@ for ds = ds_arr
     %     orthosliceViewer(abs(process.img_autoc), 'Colormap', jet);
 
     %% normal time window
-    PropertyName = 'img_hil';
+    %     PropertyName = 'img_hil';
+    PropertyName = 'img_hil_noise';
     % PropertyName = 'img_hil_filter';
-    delay       = 700;
-    max_len     = 1400;
+    delay       = 700 / ds;
+    max_len     = 1400 / ds;
     flag        = 0;
-    front_I_max = 500;
+    front_I_max = 500 / ds;
     process     = process.find_damage_timewin_asignsurface(PropertyName, max_len, flag, delay, front_I_max, 1);
     process.show_surfaces('surface');
     
@@ -177,7 +178,7 @@ for ds = ds_arr
 %     mfsize        = [1 1 1];
 %     angle_compens = -25;
 %     process.show_inplane_direction_3D_ID(xslice, yslice, zslice, mfsize, angle_compens);
-% 
+
 %% ************** calculate the mean fiber angle and its standard deviation *************
 %     %     % need the reference angle to calcualate the mean and std!
 %     process.statistic_angular_distribution(angle_compens);

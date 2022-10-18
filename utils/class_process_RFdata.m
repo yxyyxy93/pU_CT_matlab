@@ -7227,7 +7227,7 @@ classdef class_process_RFdata
                         C_scan_index_temp(i, j) = index;
                         if index < back_index && ~isnan(index)
                             C_scan_inam_temp(i, j) = mean(inam(i, j, ...
-                                max(round(index)-0, 3):min(round(index)+0, end)), 'all');
+                                max(round(index)-1, 3):min(round(index)+1, end)), 'all');
                         end
                     end
                 end
@@ -10002,7 +10002,7 @@ classdef class_process_RFdata
                 inph_ex(end-max(wl)/2:end, :, :) = NaN;
                 inph_ex(:, end-max(wl)/2:end, :) = NaN;
                 %
-                h         = slice(ax, X, Y, Z, inph_ex , xslice, yslice, zslice);
+                h = slice(ax, X, Y, Z, inph_ex , xslice, yslice, zslice);
                 hold on;
                 set(h, 'EdgeColor', 'none');
                 colormap hsv;
