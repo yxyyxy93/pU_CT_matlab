@@ -10596,8 +10596,8 @@ classdef class_process_RFdata
             end
             front_I_ave = mean(obj.front_I, 'all', 'omitnan');
             rear_I_ave  = mean(obj.rear_I, 'all', 'omitnan');
-            Idof_Ns     = circshift(Idof_Ns, -22, 1);
-            Idof_edge   = Idof_edge + 22;
+            Idof_Ns     = circshift(Idof_Ns, 22, 1);
+            Idof_edge   = Idof_edge - 22;
             %             Idof_edge = Idof_edge + 22 * round(180/length(obj.theta_LG));
             figure('Name', ['Angle_distribution_3D']);
             imagesc(Idof_edge, (1:lz)/obj.fs*1e6, Idof_Ns.');
