@@ -175,7 +175,7 @@ for i = 1:4
     
     %% ID
     % downsample
-    wavelength  = (4:2:16) * 2;
+    wavelength  = (2:2:16) * 2;
     orientation = 1:1:180;
     K           = 0.5e0;
     

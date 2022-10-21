@@ -95,16 +95,6 @@ for ratio = [6.5 13.5 17.5 21.5] / 24
     if ratio ~= 21.5 / 24
         axis off;
     end
-%     medi  = median(C_scan_inam_temp(max(wl)/2+2:end-max(wl)/2-1,...
-%         max(wl)/2+2:end-max(wl)/2-1),'all');
-%     madi = mad(C_scan_inam_temp(max(wl)/2+2:end-max(wl)/2-1,...
-%         max(wl)/2+2:end-max(wl)/2-1), 1, 'all');
-% 
-%     mean_val = mean(C_scan_inam_temp(max(wl)/2+2:end-max(wl)/2-1,...
-%         max(wl)/2+2:end-max(wl)/2-1),'all', 'omitnan');
-%     std_val = std(C_scan_inam_temp(max(wl)/2+2:end-max(wl)/2-1,...
-%         max(wl)/2+2:end-max(wl)/2-1), 1, 'all', 'omitnan');
-
     % the gated mean and std
     % the ratio of the leakage area
     bound_l = -68;
@@ -169,33 +159,8 @@ ylim([1 5.5]);
 % clim([0 0.5]);
 
 
-%% read all matrics and plot
+%% read all matrics and plot - at all frequencies
 close all;
-% 
-% % Get a list of all files in the folder, and its subfolders
-% S = dir(fullfile(FolderName, '*'));
-% N = setdiff({S([S.isdir]).name},{'.','..'}); % list of subfolders of D.
-% 
-% % bar plot elements
-% mean_val = nan(4, 4);
-% std_val = nan(4, 4);
-% ratio = nan(4, 4);
-% k = 0;
-% 
-% for ii = 1:numel(N)
-%     disp(ii);
-%     T = dir(fullfile(FolderName, N{ii}, '*.csv')); % improve by specifying the file extension.
-%     if isempty(T)
-%         continue;
-%     else
-%         k = k + 1;
-%         disp(N{ii})
-%     end
-%     T = readtable(fullfile(T.folder, T.name));
-%     mean_val(:, k) = T.Inarea_mean;
-%     std_val(:, k) = T.Inarea_std;
-%     ratio(:, k) = T.Inarea_ratio;
-% end
 
 FolderName = ['C:\Users\xiayang\OneDrive - UGent\matlab_work\results\' ...
 , 'Different_freq_orientation\dif_freq_matrics'];
@@ -247,6 +212,7 @@ set(gca, 'fontname', 'Times new roman');
 set(gca, 'fontsize', 16);
 set(gca, 'linewidth', 1.5);
 
+xticks('');
 
 % % *************  plot the ratio bar ***********
 % cf = figure('Name', '');
@@ -351,53 +317,175 @@ axis off;
 
 %%    ********************  MumfoldShah results interpretion ************
 %     ******************** MumfoldShah results interpretion**************
+FolderName = 'C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Different_freq_orientation\';
 
-%% test MumfoldShah 
+% test MumfoldShah 
 close all;
 clc;
 
+%         figure, imagesc(squeeze(u_n(:, :, 500)));
 % show C-scan slice
 PropertyName = 'img_hil';
 glabal_max = 0;
+img_3D = abs(process.img_hil);
+img_3D = img_3D(:,:,300:round(mean(process.rear_I, 'all')));
+[~, ~, lz] = size(img_3D);
+% 2D GF-ID
+wavelength  = (2:2:16) * 2;
+orientation = 1:1:180;
+SFB = 1;
+SAR = 0.5;
+gaborArray = gabor(wavelength, orientation, ...
+    'SpatialFrequencyBandwidth', SFB, 'SpatialAspectRatio', SAR);
+angle_compens = -25;
+
+% Mumfordshah smoothing
+%     figure, imagesc(squeeze(img_3D(:, :, 500)));
+if gpuDeviceCount
+    img_3D = gpuArray(img_3D);
+end
+
+%     set parameters
+alpha = 2;
+lambda = 0.1;
+eps = 1e-1;
+u_n = fx_mumfordshah(img_3D, alpha, lambda, eps);
+img_3D = gather(img_3D);
+u_n = gather(u_n);
+
 for ratio = [21.5] / 24
-    [~, C_scan_inam_temp, ~] = process.define_parallel_inamCscan(ratio, PropertyName);
+    %     [~, C_scan_inam_temp, ~] = process.define_parallel_inamCscan(ratio, PropertyName);
     % 2D GF-ID
-    wavelength  = (4:2:16) * 2.5;
-    orientation = 1:1:180;
-    SFB         = 1; % [0.5 2.5]
-    SAR         = 0.5; % [0.23 0.92]
-    imagename = 'C_scan_inam_denoise';
-    process.(imagename) = C_scan_inam_temp;
-    process    = process.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
-    % K: controls how much smoothing is applied to the Gabor magnitude responses.
-    K = 0.0e0;
-    process.show_orientation_by_ID_allwl(wavelength, orientation, K, imagename, angle_compens);
-    
-    % mumfordshah smooth
-    [m, n, k] = size(C_scan_inam_temp); % k = channels, 1 for gray scalar
-    % set parameters
-    alpha = 5;
-    lambda = 0.1;
-    eps = 1e-1;
+    C_scan_inam_temp = mean(img_3D(:, :, round(ratio*lz):round(ratio*lz)+2), 3);   
+    x  = (1:size(C_scan_inam_temp, 1))/process.fx*1e3;
+    y  = (1:size(C_scan_inam_temp, 2))/process.fy*1e3;
+    cf = figure('Name', strcat('Cscan_Amp_', num2str(ceil(ratio*24))));
+    set(cf, 'Position', [0, 0, 500, 400], 'color', 'white');
+    pcolor(x, y, C_scan_inam_temp);
+    shading flat;
+    colormap gray;   
+    colorbar;   
+    set(gca, 'fontsize', 16);
+    set(gca, 'linewidth', 1.5);
+    saveas(cf, strcat(FolderName, Filename1(1:end-4), ...
+        '\Cscan_slice_Ori_', num2str(round(ratio*24)), '.bmp'));
     %
-    u_n = fx_mumfordshah(C_scan_inam_temp, alpha, lambda, eps);
+    [gaborMagnitude, ~] = imgaborfilt(C_scan_inam_temp, gaborArray);
+    gaborMagnitude      = single(gaborMagnitude);
+    % normalized the magnitude.
+    wl_Array       = repmat(wavelength', length(gaborArray)/length(wavelength), 1);
+    BW             = SFB;
+    sigmaX         = wl_Array / pi * sqrt(log(2) / 2) * (2^BW + 1)/(2^BW - 1);
+    sigmaY         = sigmaX ./ SAR;
+    denominator    = permute(2 * sigmaX .* sigmaY * pi, [2, 3, 1]);
+    gaborMagnitude = bsxfun(@rdivide, gaborMagnitude, denominator);
+    [~, Idx_1d]    = max(gaborMagnitude, [], 3);
+    indAng_2d      = floor(Idx_1d/length(wavelength));
+    Ang = orientation(1) + indAng_2d *(orientation(2) - orientation(1));
+    Ang = mod(Ang + angle_compens, 180) - 90;  
+    cf  = figure('Name', strcat('Cscan_Orient_', num2str(ceil(ratio*24))));
+    set(cf, 'Position', [0, 0, 500, 400], 'color', 'white');
+    pcolor(x, y, Ang);
+    shading flat;
+    colormap("hsv");
+    colorbar;
+    caxis([-90 90]); % below R2022a
+    set(gca, 'fontsize', 16);
+    set(gca, 'linewidth', 1.5);
+    saveas(cf, strcat(FolderName, Filename1(1:end-4), ...
+        '\Inplane_2D_Ori_', num2str(round(ratio*24)), '.bmp'));
+    % statistic
+    % the ratio of the leakage area
+    bound_l = -68;
+    bound_h = -22;
+    Idof_edge  = -90:90;
+    Idof_N = histcounts(Ang, Idof_edge);
+    Idof_N = circshift(Idof_N, 45, 2) / sum(Idof_N);
+    Idof_edge = Idof_edge - 45;
+    Idof_n_inarea = Idof_N(Idof_edge>=bound_l & Idof_edge<=bound_h);
+    Idof_edge_inarea = bound_l: bound_h;
+    % equation for Gaussian distribution
+    gaussEqn = 'a * exp(-1/2*((x-mu)/sigma)^2)';
+    % use nlinfit to fit Gaussian using Least Squares
+    startPoints = [1 -45 1];
+    f1 = fit(Idof_edge_inarea.', Idof_n_inarea.', gaussEqn, 'Start', startPoints ...
+        , 'Algorithm', 'Trust-Region', 'MaxIter', 1e2, 'TolFun', 1e-6 ...
+        , 'Display', 'iter');
+    figure,
+    bar(Idof_edge(2:end), Idof_N, 'display', 'angle distribution');
+    hold on;
+    plot(Idof_edge, f1(Idof_edge), '.-', 'LineWidth', 1, ...
+        'display', 'Gaussian fitting');
+    legend;
+    set(gca, 'fontsize', 16);
+    set(gca, 'linewidth', 1.5);
+    saveas(gcf, strcat(FolderName, Filename1(1:end-4), ...
+        '\Inplane_distribution_Ori_', num2str(round(ratio*24)), '.bmp'));
     
-    % 2D GF-ID
-    process.(imagename) = u_n;
-    process    = process.compute_logGabor_filter_withoutFig(PropertyName, wavelength, orientation, SFB, SAR, imagename);
-    % K: controls how much smoothing is applied to the Gabor magnitude responses.
-    K = 0e0;
-    process.show_orientation_by_ID_allwl(wavelength, orientation, K, imagename, angle_compens); 
+    %
+    C_scan_inam_MS = mean(u_n(:, :, round(ratio*lz):round(ratio*lz)+2), 3);
+        cf = figure('Name', strcat('Cscan_Amp_', num2str(ceil(ratio*24))));
+    set(cf, 'Position', [0, 0, 500, 400], 'color', 'white');
+    pcolor(x, y, C_scan_inam_MS);
+    shading flat;
+    colormap gray;   
+    colorbar;   
+    set(gca, 'fontsize', 16);
+    set(gca, 'linewidth', 1.5);
+    saveas(cf, strcat(FolderName, Filename1(1:end-4), ...
+        '\Cscan_slice_MS_', num2str(round(ratio*24)), '.bmp'));
+    %
+    [gaborMagnitude, ~] = imgaborfilt(C_scan_inam_MS, gaborArray);
+    gaborMagnitude      = single(gaborMagnitude);
+    % normalized the magnitude.
+    gaborMagnitude = bsxfun(@rdivide, gaborMagnitude, denominator);
+    [~, Idx_1d] = max(gaborMagnitude, [], 3);
+    indAng_2d   = floor(Idx_1d/length(wavelength));
+    Ang_MS = orientation(1) + indAng_2d *(orientation(2) - orientation(1));
+    Ang_MS = mod(Ang_MS + angle_compens, 180) - 90;
+    cf = figure('Name', strcat('Cscan_Orient_', num2str(ceil(ratio*24))));
+    set(cf, 'Position', [0, 0, 500, 400], 'color', 'white');
+    pcolor(x, y, Ang_MS);
+    shading flat;
+    colormap("hsv");
+    colorbar;
+    caxis([-90 90]); % below R2022a
+    set(gca, 'fontsize', 16);
+    set(gca, 'linewidth', 1.5);
+    saveas(cf, strcat(FolderName, Filename1(1:end-4), ...
+        '\Inplane_2D_MS_', num2str(round(ratio*24)), '.bmp'));
+    % statistic
+    Idof_edge  = -90:90;
+    Idof_N = histcounts(Ang_MS, Idof_edge);
+    Idof_N = circshift(Idof_N, 45, 2) / sum(Idof_N);
+    Idof_edge = Idof_edge - 45;
+    Idof_n_inarea = Idof_N(Idof_edge>=bound_l & Idof_edge<=bound_h);
+    Idof_edge_inarea = bound_l: bound_h;
+    %
+    f1 = fit(Idof_edge_inarea.', Idof_n_inarea.', gaussEqn, 'Start', startPoints ...
+        , 'Algorithm', 'Trust-Region', 'MaxIter', 1e2, 'TolFun', 1e-6 ...
+        , 'Display', 'iter');
+    figure,
+    bar(Idof_edge(2:end), Idof_N, 'display', 'angle distribution');
+    hold on;
+    plot(Idof_edge, f1(Idof_edge), '.-', 'LineWidth', 1, ...
+        'display', 'Gaussian fitting');
+    set(gca, 'fontsize', 16);
+    set(gca, 'linewidth', 1.5);
+    saveas(gcf, strcat(FolderName, Filename1(1:end-4), ...
+        '\Inplane_distribution_MS_', num2str(round(ratio*24)), '.bmp'));
 end
 
 
 %% visualize 2 - MumfoldShah result - 3D
+close all;
+
 FolderName = 'C:\Users\xiayang\OneDrive - UGent\matlab_work\results\Different_freq_orientation\';
 
-% angle_compens = -22; % for 50 MHz
-angle_compens = -25;
-xslice        = 200 / process.fx * 1e3;
-yslice        = 200 / process.fy * 1e3;
+angle_compens = -22; % for 50 MHz
+% angle_compens = -25;
+xslice        = 100 / process.fx * 1e3;
+yslice        = 100 / process.fy * 1e3;
 zslice        = [];
 
 inph_ex = Inplane_direction;
@@ -502,25 +590,23 @@ for ratio = [6.5 13.5 17.5 21.5] / 24
     Idof_n = exp(Idof_Ns(:, round(ratio*lz)));
     Idof_n_inarea = Idof_n(Idof_edge>=bound_l & Idof_edge<=bound_h);
     Idof_edge_inarea = bound_l: bound_h;
-    %     inarea_ratio = size(C_scan_inam_temp_inarea) / size(C_scan_inam_temp(:));
-    %
-    %     inarea_mean = mean(C_scan_inam_temp_inarea, 'omitnan');
-    %     inarea_std  = std(C_scan_inam_temp_inarea, 1, 'omitnan');
-    
     % equation for Gaussian distribution
     gaussEqn = '(1/sigma/2.5) * exp(-1/2*((x-mu)/sigma)^2)';
-    % use nlinfit to fit Gaussian using Least Squares
     startPoints = [-45 2];
+%     gaussEqn = 'a * exp(-1/2*((x-mu)/sigma)^2)';
+%     startPoints = [1 -45 2];
+    % use nlinfit to fit Gaussian using Least Squares
     f1 = fit(Idof_edge_inarea.', Idof_n_inarea, gaussEqn, 'Start', startPoints ...
-        , 'Algorithm', 'Trust-Region', 'MaxIter', 1e6, 'TolFun', 1e-8 ...
+        , 'Algorithm', 'Trust-Region', 'MaxIter', 1e2, 'TolFun', 1e-6 ...
         , 'Display', 'iter');
     figure,
-    hold on;
-    plot(f1, Idof_edge(1:end-1).', Idof_n);
+    plot(f1, Idof_edge(2:end), Idof_n);
     
     % leakage ratio
-    edge_below = Idof_edge<bound_l | (Idof_edge>45 & Idof_edge<135);
-    edge_above = Idof_edge>bound_h & Idof_edge<45;
+    fit_curve = f1(Idof_edge);
+    edge_below = Idof_edge<bound_l | (Idof_edge>45 & Idof_edge<135) ...
+        & ([Idof_n; 0]>fit_curve).';
+    edge_above = Idof_edge>bound_h & Idof_edge<45 & ([Idof_n; 0]>fit_curve).';
     % save the metrics - only the 
     cnt = cnt + 1;
     metrics_val(cnt, 1) = sum(Idof_n(edge_above(1:end-1))); % above leakage
